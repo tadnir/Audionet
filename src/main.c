@@ -6,7 +6,7 @@
 int main(int argc, char **argv) {
     int ret = -1;
     printf("Started..\n");
-    ret = test();
+    ret = poc();
     if (ret != 0) {
         printf("Failure %d\n", ret);
         goto l_cleanup;

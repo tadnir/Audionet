@@ -1,0 +1,1 @@
+arecord -f FLOAT_LE -r 192000 -B 1 | aplay
