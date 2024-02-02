@@ -14,6 +14,7 @@ add_executable(AudioLink
         src/audio/miniaudio.c
         src/audio/audio.c
         src/fft/fft.c
+        src/asocket/asocket.c
 )
 target_include_directories(AudioLink PRIVATE include src)
 target_link_libraries(AudioLink PRIVATE pthread dl m)
