@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     }
 
     printf("Press Enter to quit...\n");
-    printf("Got char %d", getchar());
+    printf("Got char %d\n", getchar());
 
     char buffer[1024];
     ssize_t recv_length = ASOCKET__recv(socket, buffer, sizeof(buffer));
