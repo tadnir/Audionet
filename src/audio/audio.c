@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include "logger.h"
 #include "audio.h"
@@ -57,6 +58,7 @@ static void audio_callback(ma_device* pDevice, void* pOutput, const void* pInput
             pfOutput[j] += temp[j] / audio->output_waveforms_count;
         }
     }
+//    ma_data_source_
 
     free(temp);
 }
@@ -153,7 +155,11 @@ int AUDIO__set_playing_frequencies(audio_t* audio, struct frequency_output* freq
     for (int i = 0; i < frequencies_length; i++) {
         ma_waveform_set_frequency(&audio->output_waveforms[i], frequencies[i].frequency);
         ma_waveform_set_amplitude(&audio->output_waveforms[i], frequencies[i].amplitude);
+        ma_data_source_set_range_in_pcm_frames(&audio->output_waveforms[i], 0, 5);
+        ma_data_source_set_looping(&audio->output_waveforms[i], false);
     }
+
+//    ma_data_source_read_pcm_frames()
 
     return 0;
 }

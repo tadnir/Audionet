@@ -1,6 +1,7 @@
 #include <malloc.h>
 #include <math.h>
 #include <stdint.h>
+#include <assert.h>
 #include "asocket.h"
 
 #include "audio/audio.h"
@@ -11,6 +12,7 @@
 #define CHANNEL_FREQUENCY_BAND_WIDTH (50)
 #define NUMBER_OF_CHANNELS (13)
 #define NUMBER_OF_CONCURRENT_CHANNELS (3)
+#define AMPLITUDE_MAGNITUDE_THRESHOLD (0.1)
 
 #define FREQUENCY_TO_CHANNEL_INDEX(frequency) (                                                           \
     (ROUND_TO((frequency), CHANNEL_FREQUENCY_BAND_WIDTH) / CHANNEL_FREQUENCY_BAND_WIDTH)                  \
@@ -34,26 +36,56 @@ uint64_t comb(int n, int r) {
 }
 
 static uint64_t channels_to_int(int a, int b, int c) {
-//    def foo(a, b, c):
-//    ...:     b=b-1-a
-//    ...:     c=c-2-a
-//    ...:     nb = sum(range(11-a-b, 11-a, 1))
-//    ...:     na = sum([nCr(i+1, 2) for i in range(12-a, 12, 1)])
-//    ...:     return na + nb + c
+//    def channels_to_int(a, b, c):
+//        b=b-1-a
+//        c=c-2-a
+//        nb = sum(range(11-a-b, 11-a, 1))
+//        na = sum([nCr(i+1, 2) for i in range(12-a, 12, 1)])
+//        return na + nb + c
     b = b - a - 1;
     c = c - a - 2;
+
+    uint64_t na = 0;
+    for (int i = 12-a; i < 12; ++i) {
+        na += comb(i+1, 2);
+    }
 
     int nb = 0;
     for (int i = 11 - a - b; i < 11 - a; ++i) {
         nb += i;
     }
 
-    uint64_t na = 0;
-    for (int i = 12-a; i <12; ++i) {
-        na += comb(i+1, 2);
+    return na + nb + c;
+}
+
+static void int_to_channels(uint64_t value, int channels[3]) {
+    int a;
+    for (a = NUMBER_OF_CHANNELS - 2; a >= 0; a--) {
+        uint64_t na = channels_to_int(a, a+1, a+2);
+        if (value >= na) {
+            break;
+        }
     }
 
-    return na + nb + c;
+    int b;
+    for (b = NUMBER_OF_CHANNELS - 1; b > a; b--) {
+        uint64_t nb = channels_to_int(a, b, b+1);
+        if (value >= nb) {
+            break;
+        }
+    }
+
+    int c;
+    for (c = NUMBER_OF_CHANNELS; c > b; c--) {
+        uint64_t nc = channels_to_int(a, b, c);
+        if (value == nc) {
+            break;
+        }
+    }
+
+    channels[0] = a;
+    channels[1] = b;
+    channels[2] = c;
 }
 
 static int compare_ints(const void *va, const void *vb)
@@ -98,7 +130,7 @@ static void listen_callback(asocket_t* socket, const float* recorded_frame, size
           (int (*)(const void *, const void *)) compare_magnitudes);
 
     /* If there aren't at least NUMBER_OF_CONCURRENT_CHANNELS frequencies with some noticeable sound, we consider it as quiet. */
-    if (frequencies[NUMBER_OF_CONCURRENT_CHANNELS - 1].magnitude <= 0.1) {
+    if (frequencies[NUMBER_OF_CONCURRENT_CHANNELS - 1].magnitude <= AMPLITUDE_MAGNITUDE_THRESHOLD) {
         LOG_INFO("Quiet");
         goto l_cleanup;
     }
@@ -181,6 +213,21 @@ int ASOCKET__listen(asocket_t* socket) {
 
 int ASOCKET__send(asocket_t* socket, void* data, size_t size) {
     int status = -1;
+
+//    union {
+//        int values[3];
+//        struct {
+//            int a;
+//            int b;
+//            int c;
+//        } channels;
+//    } p;
+//    for (int i = 0; i < 285; ++i) {
+//        int_to_channels(i, p.values);
+//        uint64_t value = channels_to_int(p.channels.a, p.channels.b, p.channels.c);
+//        LOG_INFO("%lld -> %d, %d, %d -> %lld", i, p.channels.a, p.channels.b, p.channels.c, value);
+//        assert(i == value);
+//    }
 
     struct frequency_output freqs[] = {
             { .amplitude = 1, .frequency = 200},
