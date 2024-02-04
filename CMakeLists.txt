@@ -11,8 +11,9 @@ pkg_search_module(fftwf REQUIRED fftw3f IMPORTED_TARGET)
 ############ Targets ############
 add_executable(AudioLink
         src/main.c
-        src/audio/miniaudio.c
         src/audio/audio.c
+        src/audio/internal/miniaudio.c
+        src/audio/internal/multi_waveform_data_source.c
         src/fft/fft.c
         src/asocket/asocket.c
 )

@@ -9,6 +9,7 @@
 
 #include "logger.h"
 #include "audio.h"
+#include "internal/multi_waveform_data_source.h"
 
 /**
  * The actual encapsulated definition of the audio_t interface.
@@ -23,14 +24,11 @@ struct audio_s {
 
     void* recording_callback_context;
 
-    ma_waveform output_waveforms[MAX_OUTPUT_WAVEFORMS];
-
-    int output_waveforms_count;
-
+    ma_data_source* output;
 };
 
 static void audio_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
-    audio_t* audio = pDevice->pUserData;
+    audio_t *audio = pDevice->pUserData;
     if (audio == NULL) {
         LOG_ERROR("pDevice->pUserData is NULL!!!");
         return;
@@ -42,25 +40,13 @@ static void audio_callback(ma_device* pDevice, void* pOutput, const void* pInput
         audio->recording_callback(audio->recording_callback_context, pInput, frameCount);
     }
 
-//    LOG_DEBUG("Output channels %d", pDevice->playback.channels);
-
-    float* pfOutput = pOutput;
-    float* temp = malloc(frameCount * sizeof(float) * pDevice->playback.channels);
-    if (temp == NULL) {
-        LOG_ERROR("Failed to allocate temporary output calculation buffer");
-        return;
-    }
-
-    memset(pOutput, 0, frameCount * sizeof(float) * pDevice->playback.channels);
-    for (int i = 0; i < audio->output_waveforms_count; ++i) {
-        ma_waveform_read_pcm_frames(&audio->output_waveforms[i], temp, frameCount, NULL);
-        for (int j = 0; j < frameCount * pDevice->playback.channels; j++) {
-            pfOutput[j] += temp[j] / audio->output_waveforms_count;
+    if (audio->output != NULL) {
+        ma_result result = ma_data_source_read_pcm_frames(audio->output, pOutput, frameCount, NULL);
+        if (result != MA_SUCCESS) {
+            LOG_ERROR("Failed to read audio output from data source");
+            // TODO: Signal failure to send caller
         }
     }
-//    ma_data_source_
-
-    free(temp);
 }
 
 audio_t* AUDIO__initialize(enum standard_sample_rate framerate) {
@@ -74,17 +60,16 @@ audio_t* AUDIO__initialize(enum standard_sample_rate framerate) {
     /* Initialize state */
     audio->recording_callback = NULL;
     audio->recording_callback_context = NULL;
-    audio->output_waveforms_count = 0;
 
     /* Configure miniaudio device config */
-    ma_device_config deviceConfig = ma_device_config_init(ma_device_type_duplex);
-    deviceConfig.capture.format   = ma_format_f32;
-    deviceConfig.capture.channels = 1;
-    deviceConfig.playback.format  = ma_format_f32;
+    ma_device_config deviceConfig  = ma_device_config_init(ma_device_type_duplex);
+    deviceConfig.capture.format    = ma_format_f32;
+    deviceConfig.capture.channels  = 1;
+    deviceConfig.playback.format   = ma_format_f32;
     deviceConfig.playback.channels = 2;
-    deviceConfig.sampleRate       = framerate;
-    deviceConfig.dataCallback     = audio_callback;
-    deviceConfig.pUserData        = audio;
+    deviceConfig.sampleRate        = framerate;
+    deviceConfig.dataCallback      = audio_callback;
+    deviceConfig.pUserData         = audio;
 
     /* Initialize miniaudio device */
     result = ma_device_init(NULL, &deviceConfig, &audio->audio_device);
@@ -94,21 +79,6 @@ audio_t* AUDIO__initialize(enum standard_sample_rate framerate) {
         return NULL;
     }
 
-    /* Initialize output waveforms */
-    ma_waveform_config sineWaveDefaultConfig = ma_waveform_config_init(audio->audio_device.playback.format, audio->audio_device.playback.channels, audio->audio_device.sampleRate, ma_waveform_type_sine, 0, 100);
-    for (int i = 0; i < MAX_OUTPUT_WAVEFORMS; ++i) {
-        result = ma_waveform_init(&sineWaveDefaultConfig, &audio->output_waveforms[i]);
-        if (result != MA_SUCCESS) {
-            LOG_ERROR("Failed to initialize waveform %d", i);
-            for (int j = 0; j < i; ++j) {
-                ma_waveform_uninit(&audio->output_waveforms[j]);
-            }
-            ma_device_uninit(&audio->audio_device);
-            free(audio);
-            return NULL;
-        }
-    }
-
     LOG_INFO("Initialized device: %s", audio->audio_device.playback.name);
 
     return audio;
@@ -116,6 +86,7 @@ audio_t* AUDIO__initialize(enum standard_sample_rate framerate) {
 
 void AUDIO__free(audio_t* audio) {
     ma_device_uninit(&audio->audio_device);
+    multi_waveform_data_source_uninit(audio->output);
     free(audio);
 }
 
@@ -145,21 +116,14 @@ void AUDIO__set_recording_callback(audio_t* audio, recording_callback_t callback
 }
 
 int AUDIO__set_playing_frequencies(audio_t* audio, struct frequency_output* frequencies, int frequencies_length) {
-    if (frequencies_length > MAX_OUTPUT_WAVEFORMS) {
-        LOG_ERROR("Given more frequencies than capable to output");
+    ma_result result = multi_waveform_data_source_init(
+            (struct multi_waveform_data_source **) &audio->output,
+            audio->audio_device.playback.format, audio->audio_device.playback.channels, audio->audio_device.sampleRate,
+            frequencies, frequencies_length);
+    if (result != MA_SUCCESS) {
+        LOG_ERROR("asdasdfasdf");
         return -1;
     }
-
-    audio->output_waveforms_count = frequencies_length;
-
-    for (int i = 0; i < frequencies_length; i++) {
-        ma_waveform_set_frequency(&audio->output_waveforms[i], frequencies[i].frequency);
-        ma_waveform_set_amplitude(&audio->output_waveforms[i], frequencies[i].amplitude);
-        ma_data_source_set_range_in_pcm_frames(&audio->output_waveforms[i], 0, 5);
-        ma_data_source_set_looping(&audio->output_waveforms[i], false);
-    }
-
-//    ma_data_source_read_pcm_frames()
 
     return 0;
 }

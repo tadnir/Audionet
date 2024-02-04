@@ -927,7 +927,7 @@ You can implement a custom data source by implementing the functions in `ma_data
 Your custom object must have `ma_data_source_base` as it's first member:
 
     ```c
-    struct my_data_source
+    struct multi_waveform_data_source
     {
         ma_data_source_base base;
         ...
@@ -963,22 +963,22 @@ base object (`ma_data_source_base`):
         // Retrieve the length in PCM frames here. Return MA_NOT_IMPLEMENTED and set *pLength to 0 if there is no notion of a length or if the length is unknown.
     }
 
-    static ma_data_source_vtable g_my_data_source_vtable =
+    static ma_data_source_vtable g_multi_waveform_data_source_vtable =
     {
-        my_data_source_read,
-        my_data_source_seek,
-        my_data_source_get_data_format,
-        my_data_source_get_cursor,
-        my_data_source_get_length
+        multi_waveform_data_source_read,
+        multi_waveform_data_source_seek,
+        multi_waveform_data_source_get_data_format,
+        multi_waveform_data_source_get_cursor,
+        multi_waveform_data_source_get_length
     };
 
-    ma_result my_data_source_init(my_data_source* pMyDataSource)
+    ma_result multi_waveform_data_source_init(multi_waveform_data_source* pMyDataSource)
     {
         ma_result result;
         ma_data_source_config baseConfig;
 
         baseConfig = ma_data_source_config_init();
-        baseConfig.vtable = &g_my_data_source_vtable;
+        baseConfig.vtable = &g_multi_waveform_data_source_vtable;
 
         result = ma_data_source_init(&baseConfig, &pMyDataSource->base);
         if (result != MA_SUCCESS) {
@@ -990,7 +990,7 @@ base object (`ma_data_source_base`):
         return MA_SUCCESS;
     }
 
-    void my_data_source_uninit(my_data_source* pMyDataSource)
+    void multi_waveform_data_source_uninit(multi_waveform_data_source* pMyDataSource)
     {
         // ... do the uninitialization of your custom data source here ...
 

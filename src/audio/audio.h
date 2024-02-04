@@ -1,10 +1,8 @@
 #ifndef AUDIONET_AUDIO_H
 #define AUDIONET_AUDIO_H
 
-/**
- * The maximum amount of waveforms mixed together.
- */
-#define MAX_OUTPUT_WAVEFORMS (5)
+//TODO: Remove
+#include "internal/multi_waveform_data_source.h"
 
 /**
  * The various available sample rates for audio recording/playing.
@@ -39,14 +37,6 @@ enum standard_sample_rate {
  * The audio interface type.
  */
 typedef struct audio_s audio_t;
-
-/**
- * Frequency output configuration for outputting a specific frequency at some amplitude.
- */
-struct frequency_output {
-    double frequency;
-    double amplitude;
-};
 
 /**
  * The type definition for audio recording callback.
