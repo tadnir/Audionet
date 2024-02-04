@@ -24,27 +24,51 @@ struct audio_s {
 
     void* recording_callback_context;
 
-    ma_data_source* output;
+    ma_data_source* sounds_playback;
+
+    ma_event sounds_playback_finished_event;
+
+    ma_result sounds_playback_result;
 };
 
 static void audio_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
     audio_t *audio = pDevice->pUserData;
     if (audio == NULL) {
-        LOG_ERROR("pDevice->pUserData is NULL!!!");
+        LOG_ERROR("pDevice->pUserData is NULL");
         return;
     }
 
     if (pDevice->capture.channels != 1) {
         LOG_ERROR("Unsupported recording channel count: %d", pDevice->capture.channels);
     } else if (audio->recording_callback != NULL) {
+        /* Pass the recorded frames to the recording callback */
         audio->recording_callback(audio->recording_callback_context, pInput, frameCount);
     }
 
-    if (audio->output != NULL) {
-        ma_result result = ma_data_source_read_pcm_frames(audio->output, pOutput, frameCount, NULL);
+    if (audio->sounds_playback != NULL) {
+        /* Set the result as interrupt, this being the default status in case the Audio is uninitialized mid playing */
+        audio->sounds_playback_result = MA_INTERRUPT;
+
+        /* Output the sound to the speakers */
+        ma_result result = ma_data_source_read_pcm_frames(audio->sounds_playback, pOutput, frameCount, NULL);
         if (result != MA_SUCCESS) {
-            LOG_ERROR("Failed to read audio output from data source");
-            // TODO: Signal failure to send caller
+            if (result == MA_AT_END) {
+                /* Signal that we've exhausted the data source. */
+                audio->sounds_playback_result = MA_SUCCESS;
+            } else {
+                /* Signal we encountered an error on playback. */
+                LOG_ERROR("Failed to read audio sounds_playback from data source %d", result);
+                audio->sounds_playback_result = result;
+            }
+
+            /* Remove the current sounds playing, freeing it is the play function responsibility */
+            audio->sounds_playback = NULL;
+
+            /* Signal the play function we finished playing */
+            result = ma_event_signal(&audio->sounds_playback_finished_event);
+            if (result != MA_SUCCESS) {
+                LOG_FATAL("Failed to signal playback finished");
+            }
         }
     }
 }
@@ -60,7 +84,7 @@ audio_t* AUDIO__initialize(enum standard_sample_rate framerate) {
     /* Initialize state */
     audio->recording_callback = NULL;
     audio->recording_callback_context = NULL;
-    audio->output = NULL;
+    audio->sounds_playback = NULL;
 
     /* Configure miniaudio device config */
     ma_device_config deviceConfig  = ma_device_config_init(ma_device_type_duplex);
@@ -80,14 +104,31 @@ audio_t* AUDIO__initialize(enum standard_sample_rate framerate) {
         return NULL;
     }
 
+    /* Initialize the playback finished event */
+    result = ma_event_init(&audio->sounds_playback_finished_event);
+    if (result != MA_SUCCESS) {
+        LOG_ERROR("Failed to initialize playback finished event");
+        ma_device_uninit(&audio->audio_device);
+        free(audio);
+        return NULL;
+    }
+
     LOG_INFO("Initialized device: %s", audio->audio_device.playback.name);
 
     return audio;
 }
 
 void AUDIO__free(audio_t* audio) {
+    /* Make sure the thread is stopped */
+    AUDIO__stop(audio);
+
+    /* We signal the event in case some thread is still waiting on it */
+    ma_event_signal(&audio->sounds_playback_finished_event);
+
+    /* Uninitialized the resources,
+     * note that there's no need to uninitialize the sounds since it's the play responsibility */
     ma_device_uninit(&audio->audio_device);
-    multi_waveform_data_source_uninit(audio->output);
+    ma_event_uninit(&audio->sounds_playback_finished_event);
     free(audio);
 }
 
@@ -116,44 +157,65 @@ void AUDIO__set_recording_callback(audio_t* audio, recording_callback_t callback
     audio->recording_callback = callback;
 }
 
-int AUDIO__set_playing_frequencies(audio_t* audio, uint32_t* frequencies, uint32_t frequencies_count) {
-    unsigned int freqs[] = {
-            200,
-            250,
-            300,
-    };
-    ma_data_source* t;
-    ma_result result = multi_waveform_data_source_init(
-            (struct multi_waveform_data_source **) &t,
-            audio->audio_device.playback.format, audio->audio_device.playback.channels, audio->audio_device.sampleRate,
-            freqs, 3, audio->audio_device.sampleRate * 5);
-    if (result != MA_SUCCESS) {
-        LOG_ERROR("asdasdfasdf");
+int AUDIO__play_sounds(audio_t* audio, struct sound* sounds, uint32_t sounds_count) {
+    ma_result result;
+    if (sounds_count == 0 || sounds == NULL || audio == NULL) {
+        LOG_ERROR("Invalid parameters");
         return -1;
     }
 
-    unsigned int freqs2[] = {
-            350,
-            400,
-            450,
-    };
-    ma_data_source* t2;
+    if (audio->sounds_playback != NULL) {
+        LOG_ERROR("Another sound is currently playing");
+        return -1;
+    }
+
+    ma_data_source* first;
     result = multi_waveform_data_source_init(
-            (struct multi_waveform_data_source **) &t2,
+            (struct multi_waveform_data_source **) &first,
             audio->audio_device.playback.format, audio->audio_device.playback.channels, audio->audio_device.sampleRate,
-            freqs2, 3, audio->audio_device.sampleRate * 5);
+            sounds[0].frequencies, sounds[0].number_of_frequencies,
+            audio->audio_device.sampleRate / 1000 * sounds[0].length_milliseconds);
     if (result != MA_SUCCESS) {
-        LOG_ERROR("asdasdfasdf");
+        LOG_ERROR("Failed to initialize multi waveform");
         return -1;
     }
 
-    result = ma_data_source_set_next(t, t2);
+    ma_data_source* last = first;
+    ma_data_source* current = NULL;
+    for (int i = 1; i < sounds_count; ++i) {
+        result = multi_waveform_data_source_init(
+            (struct multi_waveform_data_source **) &current,
+                    audio->audio_device.playback.format, audio->audio_device.playback.channels, audio->audio_device.sampleRate,
+                    sounds[i].frequencies, sounds[i].number_of_frequencies,
+                    audio->audio_device.sampleRate / 1000 * sounds[i].length_milliseconds);
+        if (result != MA_SUCCESS) {
+            LOG_ERROR("Failed to initialize multi waveform");
+            return -1;
+        }
+
+        result = ma_data_source_set_next(last, current);
+        if (result != MA_SUCCESS) {
+            LOG_ERROR("Failed to update sounds chain");
+            return -1;
+        }
+
+        last = current;
+        current = NULL;
+    }
+
+    audio->sounds_playback = first;
+    result = ma_event_wait(&audio->sounds_playback_finished_event);
     if (result != MA_SUCCESS) {
-        LOG_ERROR("asdasdfasdf");
+        LOG_ERROR("Failed waiting on playback to finish");
         return -1;
     }
 
-    audio->output = t;
+    result = audio->sounds_playback_result;
+    if (result != MA_SUCCESS) {
+        LOG_ERROR("Failed playing sounds");
+        return -1;
+    }
+    // TODO: free sounds
 
     return 0;
 }

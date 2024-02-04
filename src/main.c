@@ -25,9 +25,6 @@ int main(int argc, char **argv) {
         goto l_cleanup;
     }
 
-    printf("Press Enter to quit...\n");
-    printf("Got char %d\n", getchar());
-
     char buffer[1024];
     ssize_t recv_length = ASOCKET__recv(socket, buffer, sizeof(buffer));
     if (recv_length == -1) {

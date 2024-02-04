@@ -7,6 +7,7 @@
 #define LOG_DEBUG(fmt, ...) LOG(DEBUG, fmt, ##__VA_ARGS__)
 #define LOG_INFO(fmt, ...) LOG(INFO, fmt, ##__VA_ARGS__)
 #define LOG_ERROR(fmt, ...) LOG(ERROR, fmt, ##__VA_ARGS__)
+#define LOG_FATAL(fmt, ...) LOG(FATAL, fmt, ##__VA_ARGS__)
 
 #define LOG(level, fmt, ...) do { printf(fmt "\n", ##__VA_ARGS__); fflush(stdout); } while (0)
 

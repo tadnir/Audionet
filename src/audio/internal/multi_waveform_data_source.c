@@ -71,10 +71,25 @@ l_cleanup:
     return result;
 }
 
-static ma_result multi_waveform_data_source_seek(ma_data_source* pDataSource, ma_uint64 frameIndex)
-{
-    // Seek to a specific PCM frame here. Return MA_NOT_IMPLEMENTED if seeking is not supported.
-    return MA_NOT_IMPLEMENTED;
+// Seek to a specific PCM frame here. Return MA_NOT_IMPLEMENTED if seeking is not supported.
+static ma_result multi_waveform_data_source_seek(ma_data_source* pDataSource, ma_uint64 frameIndex) {
+    if (pDataSource == NULL) {
+        return MA_INVALID_ARGS;
+    }
+
+    ma_result result;
+    struct multi_waveform_data_source* dataSource = pDataSource;
+    for (int i = 0; i < dataSource->waveforms_count; ++i) {
+        result = ma_data_source_seek_to_pcm_frame(&dataSource->waveforms[i], frameIndex);
+        if (result != MA_SUCCESS) {
+            LOG_ERROR("Failed to seek waveform from %d to %llu", dataSource->frame_cursor, frameIndex);
+            return result;
+        }
+    }
+
+    dataSource->frame_cursor = frameIndex;
+
+    return MA_SUCCESS;
 }
 
 static ma_result multi_waveform_data_source_get_data_format(ma_data_source* pDataSource, ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate, ma_channel* pChannelMap, size_t channelMapCap)

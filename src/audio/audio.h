@@ -1,6 +1,8 @@
 #ifndef AUDIONET_AUDIO_H
 #define AUDIONET_AUDIO_H
 
+#define SOUND_MAX_CONCURRENT_FREQUENCIES (5)
+
 /**
  * The various available sample rates for audio recording/playing.
  */
@@ -82,6 +84,12 @@ int AUDIO__stop(audio_t* audio);
  */
 void AUDIO__set_recording_callback(audio_t* audio, recording_callback_t callback, void* callback_context);
 
+struct sound {
+    uint32_t length_milliseconds;
+    uint32_t number_of_frequencies;
+    uint32_t frequencies[SOUND_MAX_CONCURRENT_FREQUENCIES];
+};
+
 /**
  * Set a list of frequencies to be played overlaid together.
  * At a maximum of MAX_OUTPUT_WAVEFORMS.
@@ -93,6 +101,6 @@ void AUDIO__set_recording_callback(audio_t* audio, recording_callback_t callback
  * @param frequencies_count The amount of frequencies to set.
  * @return 0 On Success, -1 On Failure.
  */
-int AUDIO__set_playing_frequencies(audio_t* audio, uint32_t* frequencies, uint32_t frequencies_count);
+int AUDIO__play_sounds(audio_t* audio, struct sound* sounds, uint32_t sounds_count);
 
 #endif //AUDIONET_AUDIO_H

@@ -13,10 +13,17 @@
 #define NUMBER_OF_CHANNELS (13)
 #define NUMBER_OF_CONCURRENT_CHANNELS (3)
 #define AMPLITUDE_MAGNITUDE_THRESHOLD (0.1)
+#define SYMBOL_LENGTH_MILLISECONDS (200)
 
 #define FREQUENCY_TO_CHANNEL_INDEX(frequency) (                                                           \
     (ROUND_TO((frequency), CHANNEL_FREQUENCY_BAND_WIDTH) / CHANNEL_FREQUENCY_BAND_WIDTH)                  \
     - (ROUND_TO(BASE_CHANNEL_FREQUENCY, CHANNEL_FREQUENCY_BAND_WIDTH) / CHANNEL_FREQUENCY_BAND_WIDTH)     \
+)
+#define CHANNEL_INDEX_TO_FREQUENCY(channel) (                                                             \
+    (                                                                                                     \
+        (channel)                                                                                         \
+        + (ROUND_TO(BASE_CHANNEL_FREQUENCY, CHANNEL_FREQUENCY_BAND_WIDTH) / CHANNEL_FREQUENCY_BAND_WIDTH) \
+    ) *  CHANNEL_FREQUENCY_BAND_WIDTH                                                                     \
 )
 #define ROUND_TO(number, rounder) (((float)rounder) * floor((((float)number)/((float)rounder))+0.5))
 
@@ -58,7 +65,13 @@ static uint64_t channels_to_int(int a, int b, int c) {
     return na + nb + c;
 }
 
-static void int_to_channels(uint64_t value, int channels[3]) {
+struct channels {
+    int a;
+    int b;
+    int c;
+};
+
+static struct channels int_to_channels(uint64_t value) {
     int a;
     for (a = NUMBER_OF_CHANNELS - 2; a >= 0; a--) {
         uint64_t na = channels_to_int(a, a+1, a+2);
@@ -83,9 +96,8 @@ static void int_to_channels(uint64_t value, int channels[3]) {
         }
     }
 
-    channels[0] = a;
-    channels[1] = b;
-    channels[2] = c;
+    struct channels out = {a, b, c};
+    return out;
 }
 
 static int compare_ints(const void *va, const void *vb)
@@ -216,36 +228,39 @@ int ASOCKET__listen(asocket_t* socket) {
 int ASOCKET__send(asocket_t* socket, void* data, size_t size) {
     int status = -1;
 
-//    union {
-//        int values[3];
-//        struct {
-//            int a;
-//            int b;
-//            int c;
-//        } channels;
-//    } p;
-//    for (int i = 0; i < 285; ++i) {
-//        int_to_channels(i, p.values);
-//        uint64_t value = channels_to_int(p.channels.a, p.channels.b, p.channels.c);
-//        LOG_INFO("%lld -> %d, %d, %d -> %lld", i, p.channels.a, p.channels.b, p.channels.c, value);
-//        assert(i == value);
-//    }
-
-    unsigned int freqs[] = {
-            200,
-            250,
-            300,
-    };
-    status = AUDIO__set_playing_frequencies(socket->audio, freqs, sizeof(freqs)/sizeof(freqs[0]));
-    if (status != 0) {
-        LOG_ERROR("Failed to set frequencies");
+    struct sound* sounds_packet = malloc(size * sizeof(struct sound));
+    if (sounds_packet == NULL) {
+        LOG_ERROR("Failed to allocate sounds packet");
         return -1;
     }
 
-    return 0;
+    for (int i = 0; i < size; ++i) {
+        struct channels channels = int_to_channels(((uint8_t*)data)[i]);
+        sounds_packet[i].length_milliseconds = SYMBOL_LENGTH_MILLISECONDS;
+        sounds_packet[i].number_of_frequencies = NUMBER_OF_CONCURRENT_CHANNELS;
+        sounds_packet[i].frequencies[0] = CHANNEL_INDEX_TO_FREQUENCY(channels.a);
+        sounds_packet[i].frequencies[1] = CHANNEL_INDEX_TO_FREQUENCY(channels.b);
+        sounds_packet[i].frequencies[2] = CHANNEL_INDEX_TO_FREQUENCY(channels.c);
+    }
+
+    status = AUDIO__play_sounds(socket->audio, sounds_packet, size);
+    if (status != 0) {
+        LOG_ERROR("Failed to play sounds");
+        status = -1;
+        goto l_cleanup;
+    }
+
+
+l_cleanup:
+    if (sounds_packet != NULL) {
+        free(sounds_packet);
+        sounds_packet = NULL;
+    }
+
+    return status;
 }
 
 ssize_t ASOCKET__recv(asocket_t* socket, void* data, size_t size) {
-    return -1;
+    return 0;
 }
 

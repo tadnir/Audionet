@@ -1,1 +1,1 @@
- rm -f ./test.wav && cmake -S . -B build && cmake --build build && build/AudioLink && play ./test.wav
+cmake -S . -B build && cmake --build build && build/AudioLink
