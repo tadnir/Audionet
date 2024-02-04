@@ -231,10 +231,10 @@ int ASOCKET__send(asocket_t* socket, void* data, size_t size) {
 //        assert(i == value);
 //    }
 
-    struct frequency_output freqs[] = {
-            { .amplitude = 1, .frequency = 200},
-            { .amplitude = 1, .frequency = 250},
-            { .amplitude = 1, .frequency = 300},
+    unsigned int freqs[] = {
+            200,
+            250,
+            300,
     };
     status = AUDIO__set_playing_frequencies(socket->audio, freqs, sizeof(freqs)/sizeof(freqs[0]));
     if (status != 0) {

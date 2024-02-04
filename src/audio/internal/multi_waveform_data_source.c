@@ -1,37 +1,66 @@
 #include <malloc.h>
-#include <string.h>
 #include "multi_waveform_data_source.h"
 #include "logger.h"
 
+#ifndef max
+#define max(a,b) (((a) > (b)) ? (a) : (b))
+#endif
+
+#ifndef min
+#define min(a,b) (((a) < (b)) ? (a) : (b))
+#endif
+
 static ma_result multi_waveform_data_source_read(ma_data_source* pDataSource, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead)
 {
-    struct multi_waveform_data_source* dataSource = pDataSource;
+    if (pFramesRead != NULL) {
+        *pFramesRead = 0;
+    }
 
+    if (frameCount == 0 || pDataSource == NULL) {
+        return MA_INVALID_ARGS;
+    }
+
+    struct multi_waveform_data_source* dataSource = pDataSource;
     if (dataSource->format != ma_format_f32) {
         LOG_ERROR("Mixing is currently not supported for non ma_format_f32 formats");
         return MA_ERROR;
     }
 
-    // Read data here. Output in the same format returned by multi_waveform_data_source_get_data_format().
-    void* temp = malloc(frameCount * ma_get_bytes_per_sample(dataSource->format) * dataSource->channels);
+    /* We initialize the buffer to silence in case we wouldn't fill it all. */
+    ma_silence_pcm_frames(pFramesOut, frameCount, dataSource->format, dataSource->channels);
+
+    /* The actual amount of frames we will output may be lower than frameCount if we reach the end of the stream. */
+    ma_uint64 frames_to_output = min(frameCount, dataSource->length_frames - dataSource->frame_cursor);
+    if (frames_to_output == 0) {
+        /* In case there's nothing more to output. */
+        return MA_AT_END;
+    }
+
+    /* We allocate a temporary buffer for mixing the different waveforms. */
+    void* temp = malloc(frames_to_output * ma_get_bytes_per_sample(dataSource->format) * dataSource->channels);
     if (temp == NULL) {
         LOG_ERROR("Failed to allocate temporary output calculation buffer");
         return MA_ERROR;
     }
 
-    memset(temp, 0, frameCount * ma_get_bytes_per_sample(dataSource->format) * dataSource->channels);
     ma_result result;
     for (int i = 0; i < dataSource->waveforms_count; ++i) {
-        result = ma_waveform_read_pcm_frames(&dataSource->waveforms[i], temp, frameCount, pFramesRead);
+        /* There's no need to check the waveform's actual read output since on success they always fill the buffer. */
+        result = ma_waveform_read_pcm_frames(&dataSource->waveforms[i], temp, frames_to_output, NULL);
         if (result != MA_SUCCESS) {
             LOG_ERROR("Failed to read from waveform");
             goto l_cleanup;
         }
 
-        ma_uint64 sampleCount = frameCount * dataSource->channels;
-        for (int iSample = 0; iSample < sampleCount; iSample++) {
-            ((float*)pFramesOut)[iSample] += ((float*)temp)[iSample] / dataSource->waveforms_count;
+        /* Mix the waveforms together with a simple average. */
+        for (int j = 0; j < frames_to_output * dataSource->channels; j++) {
+            ((float*)pFramesOut)[j] += ((float*)temp)[j] / (float) dataSource->waveforms_count;
         }
+    }
+
+    dataSource->frame_cursor += frames_to_output;
+    if (pFramesRead != NULL) {
+        *pFramesRead = frames_to_output;
     }
 
 l_cleanup:
@@ -54,18 +83,44 @@ static ma_result multi_waveform_data_source_get_data_format(ma_data_source* pDat
     return ma_data_source_get_data_format(&((struct multi_waveform_data_source*) pDataSource)->waveforms[0], pFormat, pChannels, pSampleRate, pChannelMap, channelMapCap);
 }
 
+/**
+ * Retrieve the current position of the cursor here.
+ *
+ * @param pDataSource The data source.
+ * @param pLength Returns the current cursor value of the data source.
+ * @return MA_SUCCESS on success, MA_ERROR on error.
+ */
 static ma_result multi_waveform_data_source_get_cursor(ma_data_source* pDataSource, ma_uint64* pCursor)
 {
-    // Retrieve the current position of the cursor here. Return MA_NOT_IMPLEMENTED and set *pCursor to 0 if there is no notion of a cursor.
-    *pCursor = 0;
-    return MA_NOT_IMPLEMENTED;
+    if (pDataSource == NULL) {
+        return MA_ERROR;
+    }
+
+    struct multi_waveform_data_source* data_source = pDataSource;
+    if (pCursor != NULL) {
+        *pCursor = data_source->frame_cursor;
+    }
+    return MA_SUCCESS;
 }
 
+/**
+ * Retrieve the length in PCM frames here.
+ *
+ * @param pDataSource The data source.
+ * @param pLength Returns the length of the data source.
+ * @return MA_SUCCESS on success, MA_ERROR on error.
+ */
 static ma_result multi_waveform_data_source_get_length(ma_data_source* pDataSource, ma_uint64* pLength)
 {
-    // Retrieve the length in PCM frames here. Return MA_NOT_IMPLEMENTED and set *pLength to 0 if there is no notion of a length or if the length is unknown.
-    *pLength = 0;
-    return MA_NOT_IMPLEMENTED;
+    if (pDataSource == NULL) {
+        return MA_ERROR;
+    }
+
+    struct multi_waveform_data_source* data_source = pDataSource;
+    if (pLength != NULL) {
+        *pLength = data_source->length_frames;
+    }
+    return MA_SUCCESS;
 }
 
 static ma_data_source_vtable g_multi_waveform_data_source_vtable =
@@ -79,56 +134,72 @@ static ma_data_source_vtable g_multi_waveform_data_source_vtable =
 
 ma_result
 multi_waveform_data_source_init(
-        struct multi_waveform_data_source **pOutMultiWaveformDataSource,
+        struct multi_waveform_data_source **multi_waveform,
         ma_format format, ma_uint32 channels, ma_uint32 sampleRate,
-        struct frequency_output *frequencies, int frequencies_length
+        ma_uint32 *frequencies, ma_uint32 frequencies_count, ma_uint32 length_frames
 ) {
     ma_result result;
-    ma_data_source_config baseConfig;
-
     if (format != ma_format_f32) {
         LOG_ERROR("Mixing is currently not supported for non ma_format_f32 formats");
         return MA_ERROR;
     }
 
-
-    struct multi_waveform_data_source* pMultiWaveformDataSource = malloc(sizeof(struct multi_waveform_data_source));
-    if (pMultiWaveformDataSource == NULL) {
+    struct multi_waveform_data_source* temp_multi_waveform = malloc(sizeof(struct multi_waveform_data_source));
+    if (temp_multi_waveform == NULL) {
+        LOG_ERROR("Failed to allocate mutli waveform");
         return MA_ERROR;
     }
 
-    pMultiWaveformDataSource->format = format;
-    pMultiWaveformDataSource->channels = channels;
-    pMultiWaveformDataSource->waveforms_count = frequencies_length;
-    pMultiWaveformDataSource->waveforms = malloc(frequencies_length * sizeof(ma_waveform));
-    if (pMultiWaveformDataSource == NULL) {
+    temp_multi_waveform->format = format;
+    temp_multi_waveform->channels = channels;
+    temp_multi_waveform->waveforms_count = frequencies_count;
+    temp_multi_waveform->length_frames = length_frames;
+    temp_multi_waveform->frame_cursor = 0;
+    temp_multi_waveform->waveforms = malloc(frequencies_count * sizeof(ma_waveform));
+    if (temp_multi_waveform == NULL) {
+        LOG_ERROR("Failed to allocate waveforms");
+        free(temp_multi_waveform);
         return MA_ERROR;
     }
 
-    baseConfig = ma_data_source_config_init();
+    ma_data_source_config baseConfig = ma_data_source_config_init();
     baseConfig.vtable = &g_multi_waveform_data_source_vtable;
-    result = ma_data_source_init(&baseConfig, &pMultiWaveformDataSource->base);
+    result = ma_data_source_init(&baseConfig, &temp_multi_waveform->base);
     if (result != MA_SUCCESS) {
-        return result;
+        LOG_ERROR("Failed to initialize multi waveform data_source_base");
+        goto l_cleanup;
     }
 
     /* Initialize output waveforms */
-    for (int i = 0; i < frequencies_length; ++i) {
+    for (int i = 0; i < frequencies_count; ++i) {
         ma_waveform_config sineWaveDefaultConfig = ma_waveform_config_init(
                 format, channels, sampleRate, ma_waveform_type_sine,
-                frequencies[i].amplitude, frequencies[i].frequency);
-        result = ma_waveform_init(&sineWaveDefaultConfig, &pMultiWaveformDataSource->waveforms[i]);
+                /* Amplitude */ 1, frequencies[i]);
+        result = ma_waveform_init(&sineWaveDefaultConfig, &temp_multi_waveform->waveforms[i]);
         if (result != MA_SUCCESS) {
             LOG_ERROR("Failed to initialize waveform %d", i);
             for (int j = 0; j < i; ++j) {
-                ma_waveform_uninit(&pMultiWaveformDataSource->waveforms[j]);
+                ma_waveform_uninit(&temp_multi_waveform->waveforms[j]);
             }
-            return MA_ERROR;
+            goto l_cleanup;
         }
     }
 
-    *pOutMultiWaveformDataSource = pMultiWaveformDataSource;
-    return MA_SUCCESS;
+    *multi_waveform = temp_multi_waveform;
+    temp_multi_waveform = NULL;
+    result = MA_SUCCESS;
+l_cleanup:
+    if (temp_multi_waveform != NULL) {
+        if (temp_multi_waveform->waveforms != NULL) {
+            free(temp_multi_waveform->waveforms);
+            temp_multi_waveform->waveforms = NULL;
+        }
+
+        free(temp_multi_waveform);
+        temp_multi_waveform = NULL;
+    }
+
+    return result;
 }
 
 void multi_waveform_data_source_uninit(struct multi_waveform_data_source* pMultiWaveformDataSource)
@@ -141,4 +212,6 @@ void multi_waveform_data_source_uninit(struct multi_waveform_data_source* pMulti
 
     // You must uninitialize the base data source.
     ma_data_source_uninit(&pMultiWaveformDataSource->base);
+
+    free(pMultiWaveformDataSource);
 }

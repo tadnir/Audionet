@@ -116,15 +116,44 @@ void AUDIO__set_recording_callback(audio_t* audio, recording_callback_t callback
     audio->recording_callback = callback;
 }
 
-int AUDIO__set_playing_frequencies(audio_t* audio, struct frequency_output* frequencies, int frequencies_length) {
+int AUDIO__set_playing_frequencies(audio_t* audio, uint32_t* frequencies, uint32_t frequencies_count) {
+    unsigned int freqs[] = {
+            200,
+            250,
+            300,
+    };
+    ma_data_source* t;
     ma_result result = multi_waveform_data_source_init(
-            (struct multi_waveform_data_source **) &audio->output,
+            (struct multi_waveform_data_source **) &t,
             audio->audio_device.playback.format, audio->audio_device.playback.channels, audio->audio_device.sampleRate,
-            frequencies, frequencies_length);
+            freqs, 3, audio->audio_device.sampleRate * 5);
     if (result != MA_SUCCESS) {
         LOG_ERROR("asdasdfasdf");
         return -1;
     }
+
+    unsigned int freqs2[] = {
+            350,
+            400,
+            450,
+    };
+    ma_data_source* t2;
+    result = multi_waveform_data_source_init(
+            (struct multi_waveform_data_source **) &t2,
+            audio->audio_device.playback.format, audio->audio_device.playback.channels, audio->audio_device.sampleRate,
+            freqs2, 3, audio->audio_device.sampleRate * 5);
+    if (result != MA_SUCCESS) {
+        LOG_ERROR("asdasdfasdf");
+        return -1;
+    }
+
+    result = ma_data_source_set_next(t, t2);
+    if (result != MA_SUCCESS) {
+        LOG_ERROR("asdasdfasdf");
+        return -1;
+    }
+
+    audio->output = t;
 
     return 0;
 }

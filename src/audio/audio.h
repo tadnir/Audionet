@@ -1,9 +1,6 @@
 #ifndef AUDIONET_AUDIO_H
 #define AUDIONET_AUDIO_H
 
-//TODO: Remove
-#include "internal/multi_waveform_data_source.h"
-
 /**
  * The various available sample rates for audio recording/playing.
  */
@@ -93,9 +90,9 @@ void AUDIO__set_recording_callback(audio_t* audio, recording_callback_t callback
  *
  * @param audio The audio interface to set.
  * @param frequencies The list of frequencies to set.
- * @param frequencies_length The length of the list.
+ * @param frequencies_count The amount of frequencies to set.
  * @return 0 On Success, -1 On Failure.
  */
-int AUDIO__set_playing_frequencies(audio_t* audio, struct frequency_output* frequencies, int frequencies_length);
+int AUDIO__set_playing_frequencies(audio_t* audio, uint32_t* frequencies, uint32_t frequencies_count);
 
 #endif //AUDIONET_AUDIO_H
