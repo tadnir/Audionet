@@ -60,6 +60,7 @@ audio_t* AUDIO__initialize(enum standard_sample_rate framerate) {
     /* Initialize state */
     audio->recording_callback = NULL;
     audio->recording_callback_context = NULL;
+    audio->output = NULL;
 
     /* Configure miniaudio device config */
     ma_device_config deviceConfig  = ma_device_config_init(ma_device_type_duplex);
@@ -111,8 +112,8 @@ int AUDIO__stop(audio_t* audio) {
 }
 
 void AUDIO__set_recording_callback(audio_t* audio, recording_callback_t callback, void* callback_context) {
-    audio->recording_callback = callback;
     audio->recording_callback_context = callback_context;
+    audio->recording_callback = callback;
 }
 
 int AUDIO__set_playing_frequencies(audio_t* audio, struct frequency_output* frequencies, int frequencies_length) {

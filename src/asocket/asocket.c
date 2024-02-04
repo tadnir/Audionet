@@ -165,7 +165,7 @@ asocket_t* ASOCKET__initialize() {
         return NULL;
     }
 
-    LOG_INFO("Started..");
+    LOG_DEBUG("Initializing FFT");
     socket->fft = FFT__initialize(3600, SAMPLE_RATE_48000);
     if (socket->fft == NULL) {
         LOG_ERROR("Failed to initialize fft");
@@ -173,6 +173,7 @@ asocket_t* ASOCKET__initialize() {
         return NULL;
     }
 
+    LOG_DEBUG("Initializing Audio");
     socket->audio = AUDIO__initialize(SAMPLE_RATE_48000);
     if (socket->audio == NULL) {
         LOG_ERROR("Failed to initialize audio");
@@ -181,6 +182,7 @@ asocket_t* ASOCKET__initialize() {
         return NULL;
     }
 
+    LOG_DEBUG("Starting Audio");
     int status = AUDIO__start(socket->audio);
     if (status != 0) {
         LOG_ERROR("Failed to start audio");

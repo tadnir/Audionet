@@ -11,12 +11,14 @@ int main(int argc, char **argv) {
         goto l_cleanup;
     }
 
+    LOG_INFO("Starting listen");
     status = ASOCKET__listen(socket);
     if (status != 0) {
         LOG_ERROR("Failed to start listening");
         goto l_cleanup;
     }
 
+    LOG_INFO("Sending");
     status = ASOCKET__send(socket, "Hello, World!", 14);
     if (status != 0) {
         LOG_ERROR("Failed to send message on socket");
