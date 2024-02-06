@@ -170,6 +170,7 @@ int AUDIO__play_sounds(audio_t* audio, struct sound* sounds, uint32_t sounds_cou
     }
 
     ma_data_source* first;
+    LOG_DEBUG("Playing %d %d %d", sounds[0].frequencies[0], sounds[0].frequencies[1], sounds[0].frequencies[2]);
     result = multi_waveform_data_source_init(
             (struct multi_waveform_data_source **) &first,
             audio->audio_device.playback.format, audio->audio_device.playback.channels, audio->audio_device.sampleRate,
@@ -183,6 +184,7 @@ int AUDIO__play_sounds(audio_t* audio, struct sound* sounds, uint32_t sounds_cou
     ma_data_source* last = first;
     ma_data_source* current = NULL;
     for (int i = 1; i < sounds_count; ++i) {
+        LOG_DEBUG("Playing %d %d %d", sounds[i].frequencies[0], sounds[i].frequencies[1], sounds[i].frequencies[2]);
         result = multi_waveform_data_source_init(
             (struct multi_waveform_data_source **) &current,
                     audio->audio_device.playback.format, audio->audio_device.playback.channels, audio->audio_device.sampleRate,

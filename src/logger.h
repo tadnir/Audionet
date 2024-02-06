@@ -10,7 +10,7 @@
 #define LOG_VERBOSE(fmt, ...)
 #endif // VERBOSE
 
-//#define DEBUG
+#define DEBUG
 #ifdef DEBUG
 #define LOG_DEBUG(fmt, ...) LOG(DEBUG, fmt, ##__VA_ARGS__)
 #else

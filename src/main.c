@@ -8,7 +8,7 @@
 
 int main(int argc, char **argv) {
     int status;
-    audio_socket_t* socket = AUDIO_SOCKET__initialize(AUDIO_LAYER_PHYSICAL);
+    audio_socket_t* socket = AUDIO_SOCKET__initialize(AUDIO_LAYER_LINK);
     if (socket == NULL) {
         LOG_ERROR("Failed to initialize socket");
         status = -1;
@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         goto l_cleanup;
     }
 
-    char* data = "Lorem";
+    char* data = "This";
     LOG_INFO("Sending: %s", data);
     status = AUDIO_SOCKET__send(socket, data, strlen(data));
     if (status != 0) {
@@ -38,8 +38,9 @@ int main(int argc, char **argv) {
         goto l_cleanup;
     }
 
-    buffer[1023] = '\0';
-    LOG_INFO("Got: %s", buffer);
+    LOG_INFO("HERE");
+    buffer[recv_length] = '\0';
+    LOG_INFO("Got: <%s> %zd", buffer, recv_length);
 
     LOG_INFO("Finished");
     status = 0;

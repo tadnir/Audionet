@@ -12,5 +12,6 @@ bool array_contains(unsigned int needle, size_t haystack_size, unsigned int* hay
 uint64_t comb(int n, int r);
 int compare_unsigned_ints(const unsigned int *va, const unsigned int *vb);
 int compare_floats(const float* a, const float* b);
+int find_max_index(size_t size, int array[]);
 
 #endif //AUDIONET_UTILS_H

@@ -1,5 +1,5 @@
-#ifndef AUDIONET_PHYSICAL_LAYER_H
-#define AUDIONET_PHYSICAL_LAYER_H
+#ifndef AUDIONET_LINK_LAYER_H
+#define AUDIONET_LINK_LAYER_H
 
 #include <stdbool.h>
 #include <sys/types.h>
@@ -14,4 +14,4 @@ int LINK_LAYER__listen(audio_link_layer_socket_t* socket);
 int LINK_LAYER__send(audio_link_layer_socket_t* socket, void* data, size_t size);
 ssize_t LINK_LAYER__recv(audio_link_layer_socket_t* socket, void* data, size_t size);
 
-#endif //AUDIONET_PHYSICAL_LAYER_H
+#endif //AUDIONET_LINK_LAYER_H
