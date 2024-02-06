@@ -22,9 +22,9 @@ int main(int argc, char **argv) {
         goto l_cleanup;
     }
 
-    char* data = "This";
+    char* data = "Messa";
     LOG_INFO("Sending: %s", data);
-    status = AUDIO_SOCKET__send(socket, data, strlen(data));
+    status = AUDIO_SOCKET__send(socket, data, strlen(data) + 1);
     if (status != 0) {
         LOG_ERROR("Failed to send message on socket");
         goto l_cleanup;
@@ -38,7 +38,6 @@ int main(int argc, char **argv) {
         goto l_cleanup;
     }
 
-    LOG_INFO("HERE");
     buffer[recv_length] = '\0';
     LOG_INFO("Got: <%s> %zd", buffer, recv_length);
 

@@ -12,8 +12,7 @@ struct audio_link_layer_socket_s {
 };
 
 struct link_packet_header_s {
-    uint64_t data_length;
-
+    uint32_t data_length;
     uint8_t data[];
 } __attribute__((packed));
 
@@ -56,7 +55,7 @@ int LINK_LAYER__send(audio_link_layer_socket_t *socket, void *data, size_t size)
     int ret = 0;
     for (size_t i = 0; i < packet_length; i+=MTU) {
         size_t size_to_send = min(MTU, packet_length - i);
-        ret = PHYSICAL_LAYER__send(socket->physical_layer, packet + i, size_to_send);
+        ret = PHYSICAL_LAYER__send(socket->physical_layer, ((uint8_t*) packet) + i, size_to_send);
         if (ret != 0) {
             LOG_ERROR("Failed to send data on physical layer, managed to send %zu", i * MTU);
             free(packet);
@@ -70,7 +69,7 @@ int LINK_LAYER__send(audio_link_layer_socket_t *socket, void *data, size_t size)
 
 #include <unistd.h>
 ssize_t LINK_LAYER__recv(audio_link_layer_socket_t *socket, void *data, size_t size) {
-    uint8_t packet_buffer[MTU * 2];
+    uint8_t packet_buffer[max(MTU*2, sizeof(struct link_packet_header_s))];
     size_t total_recv = 0;
     while (total_recv < sizeof(struct link_packet_header_s)) {
         ssize_t recv_ret = PHYSICAL_LAYER__recv(socket->physical_layer, packet_buffer + total_recv,MTU);
@@ -82,15 +81,12 @@ ssize_t LINK_LAYER__recv(audio_link_layer_socket_t *socket, void *data, size_t s
         total_recv += recv_ret;
     }
 
-    struct link_packet_header_s header = *(struct link_packet_header_s *) packet_buffer;
-    LOG_INFO("HERE %llu %llu", sizeof(struct link_packet_header_s), header.data_length);
-    LOG_INFO("RECV %zu", total_recv);
     total_recv -= sizeof(struct link_packet_header_s);
-    LOG_INFO("RECV %zu", total_recv);
-    memcpy(data, header.data, min(total_recv, size));
+    struct link_packet_header_s header = *(struct link_packet_header_s *) packet_buffer;
+    memcpy(data, packet_buffer + sizeof(struct link_packet_header_s), min(total_recv, size));
+    LOG_DEBUG("Got link packet header, packet size: %u, remaining: %llu", header.data_length, total_recv);
 
     while (total_recv < header.data_length) {
-        LOG_INFO("while..");
         ssize_t recv_ret = PHYSICAL_LAYER__recv(socket->physical_layer, packet_buffer, MTU);
         if (recv_ret < 0) {
             LOG_ERROR("Failed to recv link layer data");
@@ -98,9 +94,7 @@ ssize_t LINK_LAYER__recv(audio_link_layer_socket_t *socket, void *data, size_t s
         }
 
         if (size > total_recv) {
-            LOG_INFO("MMMM");
             memcpy(data + total_recv, packet_buffer, min(size-total_recv, recv_ret));
-            LOG_INFO("LLLL");
         }
 
         total_recv += recv_ret;

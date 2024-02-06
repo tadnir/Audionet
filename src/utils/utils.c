@@ -39,7 +39,7 @@ int find_max_index(size_t size, int array[]) {
     int max = 0;
     int index = 0;
     for (int i = 0; i < size; ++i) {
-        if (array[i] >= max) {
+        if (array[i] > max) {
             max = array[i];
             index = i;
         }

@@ -2,6 +2,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "physical_layer.h"
 
@@ -13,7 +14,7 @@
 #include "utils/utils.h"
 
 
-#define SYMBOL_LENGTH_MILLISECONDS (200)
+#define SYMBOL_LENGTH_MILLISECONDS (150)
 #define BUFFER_COUNT (50)
 
 enum signals {
@@ -66,10 +67,10 @@ static void listen_callback(audio_physical_layer_socket_t* socket, const float* 
     ret = AUDIO_ENCODING__decode_frequencies(&value, count_frequencies, frequencies);
     if (ret == AUDIO_DECODE_RET_QUIET) {
         LOG_VERBOSE("Quiet");
-        return;
+        goto l_cleanup;
     } else if (ret != 0) {
         LOG_ERROR("Failed to decode frequencies");
-        return;
+        goto l_cleanup;
     }
 
     switch (value) {
@@ -77,7 +78,7 @@ static void listen_callback(audio_physical_layer_socket_t* socket, const float* 
             if (socket->state == STATE_WORD) {
                 socket->byte_voted = true;
                 socket->byte_votes[value]++;
-#ifdef VERBOSE
+#ifdef DEBUG
                 char temp[2048];
                 int j = 0;
                 for (int i = 0; i < 256; ++i) {
@@ -121,17 +122,17 @@ static void listen_callback(audio_physical_layer_socket_t* socket, const float* 
             break;
         case SIGNAL_SEP ... SIGNAL_POST - 1:
             if (socket->state == STATE_WORD && socket->byte_voted) {
-                LOG_DEBUG("Sep");
                 socket->byte_voted = false;
                 struct packet_buffer* buffer = &socket->packet_buffers[socket->packet_write_index];
                 if (buffer->packet_size >= MTU) {
                     socket->state = STATE_DISCARDING;
                 } else {
                     buffer->buffer[buffer->packet_size] = find_max_index(256, socket->byte_votes);
-                    LOG_DEBUG("data: %hhx (%c)", buffer->buffer[buffer->packet_size], buffer->buffer[buffer->packet_size]);
+                    LOG_DEBUG("data: %hhu (%c)", buffer->buffer[buffer->packet_size], buffer->buffer[buffer->packet_size]);
                     buffer->packet_size++;
                 }
                 memset(socket->byte_votes, 0, sizeof(socket->byte_votes));
+                LOG_DEBUG("Sep");
             }
             break;
         case SIGNAL_POST ... SIGNAL_MAX:
@@ -237,7 +238,7 @@ int PHYSICAL_LAYER__send(audio_physical_layer_socket_t* socket, void* frame, siz
         return -1;
     }
 
-    sounds_packet[0].length_milliseconds = SYMBOL_LENGTH_MILLISECONDS * 10;
+    sounds_packet[0].length_milliseconds = SYMBOL_LENGTH_MILLISECONDS * 2;
     sounds_packet[0].number_of_frequencies = NUMBER_OF_CONCURRENT_CHANNELS;
     status = AUDIO_ENCODING__encode_frequencies(SIGNAL_PREAMBLE+1, NUMBER_OF_CONCURRENT_CHANNELS, sounds_packet[0].frequencies);
     if (status != 0) {
@@ -263,7 +264,7 @@ int PHYSICAL_LAYER__send(audio_physical_layer_socket_t* socket, void* frame, siz
         }
     }
 
-    sounds_packet[1 + 2 * size].length_milliseconds = SYMBOL_LENGTH_MILLISECONDS*5;
+    sounds_packet[1 + 2 * size].length_milliseconds = SYMBOL_LENGTH_MILLISECONDS*2;
     sounds_packet[1 + 2 * size].number_of_frequencies = NUMBER_OF_CONCURRENT_CHANNELS;
     status = AUDIO_ENCODING__encode_frequencies(SIGNAL_POST+2, NUMBER_OF_CONCURRENT_CHANNELS, sounds_packet[1 + 2 * size].frequencies);
     if (status != 0) {
@@ -271,14 +272,12 @@ int PHYSICAL_LAYER__send(audio_physical_layer_socket_t* socket, void* frame, siz
         return status;
     }
 
-    LOG_DEBUG("Sounds %zu", 2+size*2);
     status = AUDIO__play_sounds(socket->audio, sounds_packet, 2+size*2);
     if (status != 0) {
         LOG_ERROR("Failed to play sounds");
         status = -1;
         goto l_cleanup;
     }
-
 
 l_cleanup:
     if (sounds_packet != NULL) {
@@ -289,12 +288,19 @@ l_cleanup:
     return status;
 }
 
-#include<unistd.h>
-
 ssize_t PHYSICAL_LAYER__recv(audio_physical_layer_socket_t* socket, void* frame, size_t size) {
-    while(true) {
-        struct packet_buffer *packet = &socket->packet_buffers[socket->packet_read_index];
-        LOG_INFO("IN");
+    struct packet_buffer *packet = &socket->packet_buffers[socket->packet_read_index];
+    if (packet->is_full) {
+        ssize_t actual = min(size, packet->packet_size);
+        memcpy(frame, packet->buffer, actual);
+        packet->packet_size = 0;
+        packet->is_full = false;
+        socket->packet_read_index = (socket->packet_read_index + 1) % BUFFER_COUNT;
+        return actual;
+    }
+
+    for (int i = 0; i < RECV_TIMEOUT_SECONDS; ++i) {
+        sleep(1);
         if (packet->is_full) {
             ssize_t actual = min(size, packet->packet_size);
             memcpy(frame, packet->buffer, actual);
@@ -303,10 +309,9 @@ ssize_t PHYSICAL_LAYER__recv(audio_physical_layer_socket_t* socket, void* frame,
             socket->packet_read_index = (socket->packet_read_index + 1) % BUFFER_COUNT;
             return actual;
         }
-
-        sleep(1);
     }
 
-    return -1;
+    LOG_ERROR("Timed out on physical layer recv");
+    return RECV_TIMEOUT_RET_CODE;
 }
 

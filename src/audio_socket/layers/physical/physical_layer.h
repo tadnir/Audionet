@@ -5,6 +5,8 @@
 #include <sys/types.h>
 
 #define MTU (2)
+#define RECV_TIMEOUT_SECONDS (3)
+#define RECV_TIMEOUT_RET_CODE (-2)
 
 typedef struct audio_physical_layer_socket_s audio_physical_layer_socket_t;
 
