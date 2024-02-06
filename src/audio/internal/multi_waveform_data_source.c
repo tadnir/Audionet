@@ -1,14 +1,7 @@
 #include <malloc.h>
 #include "multi_waveform_data_source.h"
 #include "logger.h"
-
-#ifndef max
-#define max(a,b) (((a) > (b)) ? (a) : (b))
-#endif
-
-#ifndef min
-#define min(a,b) (((a) < (b)) ? (a) : (b))
-#endif
+#include "utils/minmax.h"
 
 static ma_result multi_waveform_data_source_read(ma_data_source* pDataSource, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead)
 {

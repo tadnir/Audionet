@@ -87,14 +87,17 @@ void AUDIO__set_recording_callback(audio_t* audio, recording_callback_t callback
 struct sound {
     uint32_t length_milliseconds;
     uint32_t number_of_frequencies;
+
+    /**
+     * A list of frequencies to be played overlaid together.
+     * At a maximum amount of MAX_OUTPUT_WAVEFORMS.
+     * The more frequencies there are the less pronounced each of them will be.
+     */
     uint32_t frequencies[SOUND_MAX_CONCURRENT_FREQUENCIES];
 };
 
 /**
- * Set a list of frequencies to be played overlaid together.
- * At a maximum of MAX_OUTPUT_WAVEFORMS.
- * Overrides previous calls.
- * The more active frequencies there the less pronounced each of them will be.
+ *
  *
  * @param audio The audio interface to set.
  * @param frequencies The list of frequencies to set.

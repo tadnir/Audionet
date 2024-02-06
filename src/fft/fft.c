@@ -58,7 +58,7 @@ void FFT__free(fft_t* fft) {
     free(fft->audioBuffer);
 }
 
-int FFT__calculate(fft_t* fft, const float* frames, size_t frame_count, const struct frequency_and_magnitude** frequencies, size_t* out_length) {
+int FFT__calculate(fft_t* fft, const float* frames, size_t frame_count, struct frequency_and_magnitude** frequencies, size_t* out_length) {
     if (frame_count != fft->frame_count) {
         printf("Frame Count %lld\n", frame_count);
         exit(-1);
