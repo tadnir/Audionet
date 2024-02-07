@@ -50,7 +50,7 @@ typedef void (*recording_callback_t)(void* context, const float* recorded_frame,
  * @param sample_rate The sample rate at which to record/play.
  * @return The initialize audio interface. Returns NULL on failure.
  */
-audio_t* AUDIO__initialize(enum standard_sample_rate sample_rate);
+audio_t* AUDIO__initialize(enum standard_sample_rate sample_rate, bool full_duplex);
 
 /**
  * Frees and uninitializes the audio interface.
@@ -84,7 +84,7 @@ int AUDIO__stop(audio_t* audio);
  */
 void AUDIO__set_recording_callback(audio_t* audio, recording_callback_t callback, void* callback_context);
 
-struct sound {
+struct sound_s {
     uint32_t length_milliseconds;
     uint32_t number_of_frequencies;
 
@@ -104,6 +104,6 @@ struct sound {
  * @param frequencies_count The amount of frequencies to set.
  * @return 0 On Success, -1 On Failure.
  */
-int AUDIO__play_sounds(audio_t* audio, struct sound* sounds, uint32_t sounds_count);
+int AUDIO__play_sounds(audio_t* audio, struct sound_s* sounds, uint32_t sounds_count);
 
 #endif //AUDIONET_AUDIO_H

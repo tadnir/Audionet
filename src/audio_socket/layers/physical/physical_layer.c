@@ -15,6 +15,9 @@
 
 
 #define SYMBOL_LENGTH_MILLISECONDS (150)
+#define PREAMBLE_SYMBOL_LENGTH_MILLISECONDS (SYMBOL_LENGTH_MILLISECONDS * 2)
+#define POST_SYMBOL_LENGTH_MILLISECONDS (SYMBOL_LENGTH_MILLISECONDS * 2)
+#define SEP_SYMBOL_LENGTH_MILLISECONDS (SYMBOL_LENGTH_MILLISECONDS)
 #define BUFFER_COUNT (50)
 
 enum signals {
@@ -28,17 +31,15 @@ enum signals {
 };
 
 enum state_e {
-    STATE_PREAMBLE1,
-    STATE_PREAMBLE2,
-    STATE_PREAMBLE3,
+    STATE_PREAMBLE,
     STATE_WORD,
     STATE_DISCARDING,
 };
 
 struct packet_buffer {
-    size_t packet_size;
+    uint32_t packet_size;
     bool is_full;
-    unsigned char buffer[MTU];
+    uint8_t buffer[MTU];
 };
 
 struct audio_physical_layer_socket_s {
@@ -46,37 +47,45 @@ struct audio_physical_layer_socket_s {
     fft_t* fft;
     enum state_e state;
     int byte_votes[256];
-    bool byte_voted;
+    bool is_byte_voted;
     struct packet_buffer packet_buffers[BUFFER_COUNT];
     int packet_write_index;
     int packet_read_index;
 };
 
-static void listen_callback(audio_physical_layer_socket_t* socket, const float* recorded_frame, size_t size) {
+static int decode_recording(fft_t* fft, const float* recorded_frame, size_t size, uint64_t* value_out) {
     int ret;
-    struct frequency_and_magnitude* frequencies = NULL;
     size_t count_frequencies;
+    struct frequency_and_magnitude* frequencies = NULL;
 
-    ret = FFT__calculate(socket->fft, recorded_frame, size, &frequencies, &count_frequencies);
+    ret = FFT__calculate(fft, recorded_frame, size, &frequencies, &count_frequencies);
     if (ret != 0) {
         LOG_ERROR("Failed to calculate fft on provided sound frame");
-        return;
+        return -1;
     }
 
-    uint64_t value;
-    ret = AUDIO_ENCODING__decode_frequencies(&value, count_frequencies, frequencies);
+    ret = AUDIO_ENCODING__decode_frequencies(value_out, count_frequencies, frequencies);
+    free(frequencies);
     if (ret == AUDIO_DECODE_RET_QUIET) {
         LOG_VERBOSE("Quiet");
-        goto l_cleanup;
     } else if (ret != 0) {
         LOG_ERROR("Failed to decode frequencies");
-        goto l_cleanup;
+    }
+
+    return ret;
+}
+
+static void listen_callback(audio_physical_layer_socket_t* socket, const float* recorded_frame, size_t size) {
+    uint64_t value;
+    int ret = decode_recording(socket->fft, recorded_frame, size, &value);
+    if (ret != 0) {
+        return;
     }
 
     switch (value) {
         case 0 ... 255:
             if (socket->state == STATE_WORD) {
-                socket->byte_voted = true;
+                socket->is_byte_voted = true;
                 socket->byte_votes[value]++;
 #ifdef DEBUG
                 char temp[2048];
@@ -103,14 +112,8 @@ static void listen_callback(audio_physical_layer_socket_t* socket, const float* 
             break;
         case SIGNAL_PREAMBLE ... SIGNAL_SEP-1:
             switch (socket->state) {
-                case STATE_PREAMBLE1:
+                case STATE_PREAMBLE:
                     LOG_DEBUG("Preamble");
-                    socket->state = STATE_PREAMBLE2;
-                    break;
-                case STATE_PREAMBLE2:
-                    socket->state = STATE_PREAMBLE3;
-                    break;
-                default:
                     if (socket->packet_buffers[socket->packet_write_index].is_full) {
                         LOG_DEBUG("Preamble with full buffer -> discarding");
                         socket->state = STATE_DISCARDING;
@@ -121,8 +124,8 @@ static void listen_callback(audio_physical_layer_socket_t* socket, const float* 
             }
             break;
         case SIGNAL_SEP ... SIGNAL_POST - 1:
-            if (socket->state == STATE_WORD && socket->byte_voted) {
-                socket->byte_voted = false;
+            if (socket->state == STATE_WORD && socket->is_byte_voted) {
+                socket->is_byte_voted = false;
                 struct packet_buffer* buffer = &socket->packet_buffers[socket->packet_write_index];
                 if (buffer->packet_size >= MTU) {
                     socket->state = STATE_DISCARDING;
@@ -136,30 +139,24 @@ static void listen_callback(audio_physical_layer_socket_t* socket, const float* 
             }
             break;
         case SIGNAL_POST ... SIGNAL_MAX:
-            if (socket->state == STATE_DISCARDING || socket->state == STATE_PREAMBLE1) {
+            if (socket->state == STATE_DISCARDING || socket->state == STATE_PREAMBLE) {
                 if (!socket->packet_buffers[socket->packet_write_index].is_full) {
                     socket->packet_buffers[socket->packet_write_index].packet_size = 0;
                 }
-                socket->state = STATE_PREAMBLE1;
+                socket->state = STATE_PREAMBLE;
             } else {
                 LOG_DEBUG("Post");
                 struct packet_buffer* buffer = &socket->packet_buffers[socket->packet_write_index];
                 socket->packet_write_index = (socket->packet_write_index + 1) % BUFFER_COUNT;
                 buffer->is_full = true;
                 memset(socket->byte_votes, 0, sizeof(socket->byte_votes));
-                socket->byte_voted = false;
-                socket->state = STATE_PREAMBLE1;
+                socket->is_byte_voted = false;
+                socket->state = STATE_PREAMBLE;
             }
             break;
         default:
             LOG_WARNING("Unknown signal %llu", value);
             break;
-    }
-
-l_cleanup:
-    if (frequencies != NULL) {
-        free((void*) frequencies);
-        frequencies = NULL;
     }
 }
 
@@ -170,9 +167,9 @@ audio_physical_layer_socket_t* PHYSICAL_LAYER__initialize() {
         return NULL;
     }
 
-    socket->state = STATE_PREAMBLE1;
+    socket->state = STATE_PREAMBLE;
     memset(socket->byte_votes, 0, sizeof(socket->byte_votes));
-    socket->byte_voted = false;
+    socket->is_byte_voted = false;
     memset(socket->packet_buffers, 0, sizeof(socket->packet_buffers));
     socket->packet_write_index = 0;
     socket->packet_read_index = 0;
@@ -186,7 +183,7 @@ audio_physical_layer_socket_t* PHYSICAL_LAYER__initialize() {
     }
 
     LOG_DEBUG("Initializing Audio");
-    socket->audio = AUDIO__initialize(SAMPLE_RATE_48000);
+    socket->audio = AUDIO__initialize(SAMPLE_RATE_48000, false);
     if (socket->audio == NULL) {
         LOG_ERROR("Failed to initialize audio");
         FFT__free(socket->fft);
@@ -195,6 +192,7 @@ audio_physical_layer_socket_t* PHYSICAL_LAYER__initialize() {
     }
 
     LOG_DEBUG("Starting Audio");
+    AUDIO__set_recording_callback(socket->audio, (recording_callback_t) listen_callback, socket);
     int status = AUDIO__start(socket->audio);
     if (status != 0) {
         LOG_ERROR("Failed to start audio");
@@ -220,94 +218,79 @@ void PHYSICAL_LAYER__free(audio_physical_layer_socket_t* socket) {
     free(socket);
 }
 
-int PHYSICAL_LAYER__listen(audio_physical_layer_socket_t* socket) {
-    AUDIO__set_recording_callback(socket->audio, (recording_callback_t) listen_callback, socket);
-    return 0;
+static int set_sound_by_value(struct sound_s* sound, uint32_t length_milliseconds, uint32_t number_of_frequencies, int64_t value) {
+    sound->length_milliseconds = length_milliseconds;
+    sound->number_of_frequencies = number_of_frequencies;
+    int status = AUDIO_ENCODING__encode_frequencies(value, number_of_frequencies, sound->frequencies);
+    if (status != 0) {
+        LOG_ERROR("Failed to encode frequencies for value %lld", value);
+    }
+    return status;
 }
 
 int PHYSICAL_LAYER__send(audio_physical_layer_socket_t* socket, void* frame, size_t size) {
     int status = -1;
-    if (size == 0 || frame == NULL) {
+    if (size == 0 || frame == NULL || size > MTU) {
         LOG_ERROR("Bad Parameters");
         return -1;
     }
 
-    struct sound* sounds_packet = malloc((2 + 2 * size) * sizeof(struct sound));
-    if (sounds_packet == NULL) {
-        LOG_ERROR("Failed to allocate sounds packet");
-        return -1;
-    }
-
-    sounds_packet[0].length_milliseconds = SYMBOL_LENGTH_MILLISECONDS * 2;
-    sounds_packet[0].number_of_frequencies = NUMBER_OF_CONCURRENT_CHANNELS;
-    status = AUDIO_ENCODING__encode_frequencies(SIGNAL_PREAMBLE+1, NUMBER_OF_CONCURRENT_CHANNELS, sounds_packet[0].frequencies);
+    struct sound_s sounds_packet[2 + 2 * MTU];
+    status = set_sound_by_value(&sounds_packet[0], PREAMBLE_SYMBOL_LENGTH_MILLISECONDS,
+                                NUMBER_OF_CONCURRENT_CHANNELS, SIGNAL_PREAMBLE+1);
     if (status != 0) {
-        LOG_ERROR("Failed to encode frequencies for value %d", SIGNAL_PREAMBLE);
         return status;
     }
 
     for (int frame_index = 0, packet_index = 1; frame_index < size; frame_index++, packet_index+=2) {
-        sounds_packet[packet_index].length_milliseconds = SYMBOL_LENGTH_MILLISECONDS;
-        sounds_packet[packet_index].number_of_frequencies = NUMBER_OF_CONCURRENT_CHANNELS;
-        status = AUDIO_ENCODING__encode_frequencies(((uint8_t*)frame)[frame_index], NUMBER_OF_CONCURRENT_CHANNELS, sounds_packet[packet_index].frequencies);
+        status = set_sound_by_value(&sounds_packet[packet_index], SYMBOL_LENGTH_MILLISECONDS,
+                                    NUMBER_OF_CONCURRENT_CHANNELS, ((uint8_t*)frame)[frame_index]);
         if (status != 0) {
-            LOG_ERROR("Failed to encode frequencies for value %d", SIGNAL_SEP);
             return status;
         }
 
-        sounds_packet[packet_index + 1].length_milliseconds = SYMBOL_LENGTH_MILLISECONDS;
-        sounds_packet[packet_index + 1].number_of_frequencies = NUMBER_OF_CONCURRENT_CHANNELS;
-        status = AUDIO_ENCODING__encode_frequencies(SIGNAL_SEP+1, NUMBER_OF_CONCURRENT_CHANNELS, sounds_packet[packet_index+1].frequencies);
+        status = set_sound_by_value(&sounds_packet[packet_index + 1], SEP_SYMBOL_LENGTH_MILLISECONDS,
+                                    NUMBER_OF_CONCURRENT_CHANNELS, SIGNAL_SEP+1);
         if (status != 0) {
-            LOG_ERROR("Failed to encode frequencies for value %d", SIGNAL_SEP);
             return status;
         }
     }
 
-    sounds_packet[1 + 2 * size].length_milliseconds = SYMBOL_LENGTH_MILLISECONDS*2;
-    sounds_packet[1 + 2 * size].number_of_frequencies = NUMBER_OF_CONCURRENT_CHANNELS;
-    status = AUDIO_ENCODING__encode_frequencies(SIGNAL_POST+2, NUMBER_OF_CONCURRENT_CHANNELS, sounds_packet[1 + 2 * size].frequencies);
+    status = set_sound_by_value(&sounds_packet[1 + 2 * size], POST_SYMBOL_LENGTH_MILLISECONDS,
+                                NUMBER_OF_CONCURRENT_CHANNELS, SIGNAL_POST+2);
     if (status != 0) {
-        LOG_ERROR("Failed to encode frequencies for value %d", SIGNAL_POST);
         return status;
     }
 
     status = AUDIO__play_sounds(socket->audio, sounds_packet, 2+size*2);
     if (status != 0) {
         LOG_ERROR("Failed to play sounds");
-        status = -1;
-        goto l_cleanup;
+        return status;
     }
 
-l_cleanup:
-    if (sounds_packet != NULL) {
-        free(sounds_packet);
-        sounds_packet = NULL;
-    }
-
-    return status;
+    return 0;
 }
 
 ssize_t PHYSICAL_LAYER__recv(audio_physical_layer_socket_t* socket, void* frame, size_t size) {
-    struct packet_buffer *packet = &socket->packet_buffers[socket->packet_read_index];
-    if (packet->is_full) {
-        ssize_t actual = min(size, packet->packet_size);
-        memcpy(frame, packet->buffer, actual);
-        packet->packet_size = 0;
-        packet->is_full = false;
-        socket->packet_read_index = (socket->packet_read_index + 1) % BUFFER_COUNT;
-        return actual;
+    LOG_INFO("HERE");
+    if (size < MTU || frame == NULL) {
+        LOG_ERROR("Invalid parameters");
+        return -1;
     }
 
-    for (int i = 0; i < RECV_TIMEOUT_SECONDS; ++i) {
-        sleep(1);
+    struct packet_buffer *packet = &socket->packet_buffers[socket->packet_read_index];
+    for (int i = 0; i <= RECV_TIMEOUT_SECONDS; ++i) {
+        if (i > 0) {
+            sleep(1);
+        }
+
         if (packet->is_full) {
-            ssize_t actual = min(size, packet->packet_size);
-            memcpy(frame, packet->buffer, actual);
+            uint32_t packet_size = min(packet->packet_size, MTU);
+            memcpy(frame, packet->buffer, packet_size);
             packet->packet_size = 0;
             packet->is_full = false;
             socket->packet_read_index = (socket->packet_read_index + 1) % BUFFER_COUNT;
-            return actual;
+            return packet_size;
         }
     }
 

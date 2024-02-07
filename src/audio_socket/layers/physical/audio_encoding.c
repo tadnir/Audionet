@@ -172,7 +172,7 @@ int AUDIO_ENCODING__decode_frequencies(uint64_t* value_out, size_t frequencies_c
 
     LOG_VERBOSE("Trying to decode %d %d %d", channels[0], channels[1], channels[2]);
     *value_out = decode_channels(NUMBER_OF_CHANNELS, NUMBER_OF_CONCURRENT_CHANNELS, channels);
-#ifdef DEBUG
+#ifdef VERBOSE
     printf("Decoded %llu: ", *value_out);
     for(int i=0; i < NUMBER_OF_CONCURRENT_CHANNELS; ++i) {
         printf("%d ", CHANNEL_INDEX_TO_FREQUENCY(channels[i]));
@@ -201,7 +201,7 @@ int AUDIO_ENCODING__encode_frequencies(uint64_t value, size_t frequencies_count,
         frequencies[i] = CHANNEL_INDEX_TO_FREQUENCY(channels[i]);
     }
 
-#ifdef DEBUG
+#ifdef VERBOSE
     printf("Encoded %llu: ", value);
     for(int i=0; i < NUMBER_OF_CONCURRENT_CHANNELS; ++i) {
         printf("%d ", frequencies[i]);

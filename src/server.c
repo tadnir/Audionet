@@ -15,30 +15,20 @@ int main(int argc, char **argv) {
         goto l_cleanup;
     }
 
-    LOG_INFO("Starting listen");
-    status = AUDIO_SOCKET__listen(socket);
-    if (status != 0) {
-        LOG_ERROR("Failed to start listening");
-        goto l_cleanup;
-    }
-
-    char* data = "Messa";
-    LOG_INFO("Sending: %s", data);
-    status = AUDIO_SOCKET__send(socket, data, strlen(data) + 1);
-    if (status != 0) {
-        LOG_ERROR("Failed to send message on socket");
-        goto l_cleanup;
-    }
-
     char buffer[1024];
     ssize_t recv_length = AUDIO_SOCKET__recv(socket, buffer, sizeof(buffer));
-    if (recv_length == -1) {
-        LOG_ERROR("Failed to recv message on socket");
-        status  = -1;
+    if (recv_length < 0) {
+        LOG_ERROR("Failed to recv message on socket: %zd", recv_length);
+        status = -1;
         goto l_cleanup;
     }
 
-    buffer[recv_length] = '\0';
+    size_t length = strnlen(buffer, recv_length);
+    if (length == sizeof(buffer)) {
+        LOG_WARNING("No null terminator, adding at end");
+        buffer[length - 1] = '\0';
+    }
+
     LOG_INFO("Got: <%s> %zd", buffer, recv_length);
 
     LOG_INFO("Finished");

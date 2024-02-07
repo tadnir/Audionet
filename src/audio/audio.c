@@ -29,6 +29,8 @@ struct audio_s {
     ma_event sounds_playback_finished_event;
 
     ma_result sounds_playback_result;
+
+    bool full_duplex;
 };
 
 static void audio_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
@@ -36,13 +38,6 @@ static void audio_callback(ma_device* pDevice, void* pOutput, const void* pInput
     if (audio == NULL) {
         LOG_ERROR("pDevice->pUserData is NULL");
         return;
-    }
-
-    if (pDevice->capture.channels != 1) {
-        LOG_ERROR("Unsupported recording channel count: %d", pDevice->capture.channels);
-    } else if (audio->recording_callback != NULL) {
-        /* Pass the recorded frames to the recording callback */
-        audio->recording_callback(audio->recording_callback_context, pInput, frameCount);
     }
 
     if (audio->sounds_playback != NULL) {
@@ -70,10 +65,22 @@ static void audio_callback(ma_device* pDevice, void* pOutput, const void* pInput
                 LOG_FATAL("Failed to signal playback finished");
             }
         }
+
+        /* Return because we're not allowing to record ourself in half duplex mode. */
+        if (!audio->full_duplex) {
+            return;
+        }
+    }
+
+    if (pDevice->capture.channels != 1) {
+        LOG_ERROR("Unsupported recording channel count: %d", pDevice->capture.channels);
+    } else if (audio->recording_callback != NULL) {
+        /* Pass the recorded frames to the recording callback */
+        audio->recording_callback(audio->recording_callback_context, pInput, frameCount);
     }
 }
 
-audio_t* AUDIO__initialize(enum standard_sample_rate framerate) {
+audio_t* AUDIO__initialize(enum standard_sample_rate framerate, bool full_duplex) {
     ma_result result;
     audio_t* audio = (audio_t*) malloc(sizeof(audio_t));
     if (audio == NULL) {
@@ -85,6 +92,7 @@ audio_t* AUDIO__initialize(enum standard_sample_rate framerate) {
     audio->recording_callback = NULL;
     audio->recording_callback_context = NULL;
     audio->sounds_playback = NULL;
+    audio->full_duplex = full_duplex;
 
     /* Configure miniaudio device config */
     ma_device_config deviceConfig  = ma_device_config_init(ma_device_type_duplex);
@@ -157,7 +165,7 @@ void AUDIO__set_recording_callback(audio_t* audio, recording_callback_t callback
     audio->recording_callback = callback;
 }
 
-int AUDIO__play_sounds(audio_t* audio, struct sound* sounds, uint32_t sounds_count) {
+int AUDIO__play_sounds(audio_t* audio, struct sound_s* sounds, uint32_t sounds_count) {
     ma_result result;
     if (sounds_count == 0 || sounds == NULL || audio == NULL) {
         LOG_ERROR("Invalid parameters");
