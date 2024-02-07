@@ -8,7 +8,7 @@
 
 int main(int argc, char **argv) {
     int status;
-    audio_socket_t* socket = AUDIO_SOCKET__initialize(AUDIO_LAYER_LINK);
+    audio_socket_t* socket = AUDIO_SOCKET__initialize(AUDIO_LAYER_TRANSPORT);
     if (socket == NULL) {
         LOG_ERROR("Failed to initialize socket");
         status = -1;

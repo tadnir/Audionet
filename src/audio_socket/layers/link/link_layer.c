@@ -9,7 +9,7 @@
 #include "utils/minmax.h"
 
 #define MAX_LINK_FRAMES (UCHAR_MAX + 1)
-#define MAX_LINK_PACKET_SIZE (MAX_LINK_FRAMES * (MTU - 1))
+#define MAX_LINK_PACKET_SIZE (MAX_LINK_FRAMES * (PHYSICAL_LAYER_MTU - 1))
 
 struct audio_link_layer_socket_s {
     audio_physical_layer_socket_t* physical_layer;
@@ -17,7 +17,7 @@ struct audio_link_layer_socket_s {
 
 struct link_frame_s {
     uint8_t seq;
-    uint8_t data[MTU-1];
+    uint8_t data[PHYSICAL_LAYER_MTU - 1];
 } __attribute__((packed));
 
 struct link_packet_header_s {
@@ -62,14 +62,14 @@ int LINK_LAYER__send(audio_link_layer_socket_t *socket, void *data, size_t size)
     while (data_sent < size) {
         size_t frame_data_length = 0;
         if (header_sent < sizeof(header)) {
-            size_t header_length_to_be_sent = min(MTU - 1, sizeof(header) - header_sent);
+            size_t header_length_to_be_sent = min(PHYSICAL_LAYER_MTU - 1, sizeof(header) - header_sent);
             memcpy(frame.data, ((uint8_t*)&header) + header_sent, header_length_to_be_sent);
             frame_data_length += header_length_to_be_sent;
             header_sent += header_length_to_be_sent;
         }
 
-        if (frame_data_length < MTU - 1) {
-            size_t data_length_to_be_sent = min(MTU - 1 - frame_data_length, size - data_sent);
+        if (frame_data_length < PHYSICAL_LAYER_MTU - 1) {
+            size_t data_length_to_be_sent = min(PHYSICAL_LAYER_MTU - 1 - frame_data_length, size - data_sent);
             memcpy(((uint8_t*)frame.data) + frame_data_length, ((uint8_t*)data) + data_sent, data_length_to_be_sent);
             frame_data_length += data_length_to_be_sent;
             data_sent += data_length_to_be_sent;
@@ -95,15 +95,24 @@ ssize_t LINK_LAYER__recv(audio_link_layer_socket_t *socket, void *data, size_t s
     size_t current_new_data_count = 0;
     uint8_t seq = 0;
     while (true) {
-        ssize_t recv_ret = PHYSICAL_LAYER__recv(socket->physical_layer, &frame, MTU);
+        ssize_t recv_ret = PHYSICAL_LAYER__recv(socket->physical_layer, &frame, PHYSICAL_LAYER_MTU);
         if (recv_ret < 0) {
             LOG_ERROR("Failed to recv link layer header: %zd", recv_ret);
             return recv_ret;
         }
 
         if (seq != frame.seq) {
-            LOG_ERROR("link layer received bad seq %d, expected %d", frame.seq, seq);
-            return -1;
+            LOG_ERROR("link layer received bad seq %d, expected %d, cleaning physical layer", frame.seq, seq);
+            while (true) {
+                recv_ret = PHYSICAL_LAYER__peek(socket->physical_layer, &frame, PHYSICAL_LAYER_MTU, false);
+                if (recv_ret < 0 ) {
+                    return recv_ret;
+                } else if (recv_ret == 0 || frame.seq == 0) {
+                    return RECV_OUT_OF_SYNC_RET_CODE;
+                }
+
+                PHYSICAL_LAYER__pop(socket->physical_layer);
+            }
         }
         seq++;
 

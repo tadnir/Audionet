@@ -39,7 +39,7 @@ enum state_e {
 struct packet_buffer {
     uint32_t packet_size;
     bool is_full;
-    uint8_t buffer[MTU];
+    uint8_t buffer[PHYSICAL_LAYER_MTU];
 };
 
 struct audio_physical_layer_socket_s {
@@ -51,6 +51,7 @@ struct audio_physical_layer_socket_s {
     struct packet_buffer packet_buffers[BUFFER_COUNT];
     int packet_write_index;
     int packet_read_index;
+    int recv_timeout_seconds;
 };
 
 static int decode_recording(fft_t* fft, const float* recorded_frame, size_t size, uint64_t* value_out) {
@@ -127,7 +128,7 @@ static void listen_callback(audio_physical_layer_socket_t* socket, const float* 
             if (socket->state == STATE_WORD && socket->is_byte_voted) {
                 socket->is_byte_voted = false;
                 struct packet_buffer* buffer = &socket->packet_buffers[socket->packet_write_index];
-                if (buffer->packet_size >= MTU) {
+                if (buffer->packet_size >= PHYSICAL_LAYER_MTU) {
                     socket->state = STATE_DISCARDING;
                 } else {
                     buffer->buffer[buffer->packet_size] = find_max_index(256, socket->byte_votes);
@@ -147,8 +148,10 @@ static void listen_callback(audio_physical_layer_socket_t* socket, const float* 
             } else {
                 LOG_DEBUG("Post");
                 struct packet_buffer* buffer = &socket->packet_buffers[socket->packet_write_index];
-                socket->packet_write_index = (socket->packet_write_index + 1) % BUFFER_COUNT;
-                buffer->is_full = true;
+                if (buffer->packet_size > 0) {
+                    socket->packet_write_index = (socket->packet_write_index + 1) % BUFFER_COUNT;
+                    buffer->is_full = true;
+                }
                 memset(socket->byte_votes, 0, sizeof(socket->byte_votes));
                 socket->is_byte_voted = false;
                 socket->state = STATE_PREAMBLE;
@@ -173,6 +176,7 @@ audio_physical_layer_socket_t* PHYSICAL_LAYER__initialize() {
     memset(socket->packet_buffers, 0, sizeof(socket->packet_buffers));
     socket->packet_write_index = 0;
     socket->packet_read_index = 0;
+    socket->recv_timeout_seconds = RECV_TIMEOUT_SECONDS;
 
     LOG_DEBUG("Initializing FFT");
     socket->fft = FFT__initialize(3600, SAMPLE_RATE_48000);
@@ -230,12 +234,12 @@ static int set_sound_by_value(struct sound_s* sound, uint32_t length_millisecond
 
 int PHYSICAL_LAYER__send(audio_physical_layer_socket_t* socket, void* frame, size_t size) {
     int status = -1;
-    if (size == 0 || frame == NULL || size > MTU) {
+    if (size == 0 || frame == NULL || size > PHYSICAL_LAYER_MTU) {
         LOG_ERROR("Bad Parameters");
         return -1;
     }
 
-    struct sound_s sounds_packet[2 + 2 * MTU];
+    struct sound_s sounds_packet[2 + 2 * PHYSICAL_LAYER_MTU];
     status = set_sound_by_value(&sounds_packet[0], PREAMBLE_SYMBOL_LENGTH_MILLISECONDS,
                                 NUMBER_OF_CONCURRENT_CHANNELS, SIGNAL_PREAMBLE+1);
     if (status != 0) {
@@ -271,30 +275,56 @@ int PHYSICAL_LAYER__send(audio_physical_layer_socket_t* socket, void* frame, siz
     return 0;
 }
 
-ssize_t PHYSICAL_LAYER__recv(audio_physical_layer_socket_t* socket, void* frame, size_t size) {
-    LOG_INFO("HERE");
-    if (size < MTU || frame == NULL) {
+ssize_t PHYSICAL_LAYER__peek(audio_physical_layer_socket_t* socket, void* frame, size_t size, bool blocking) {
+    if (size < PHYSICAL_LAYER_MTU || frame == NULL) {
         LOG_ERROR("Invalid parameters");
         return -1;
     }
 
     struct packet_buffer *packet = &socket->packet_buffers[socket->packet_read_index];
-    for (int i = 0; i <= RECV_TIMEOUT_SECONDS; ++i) {
+    for (int i = 0; i <= socket->recv_timeout_seconds; ++i) {
         if (i > 0) {
             sleep(1);
         }
 
         if (packet->is_full) {
-            uint32_t packet_size = min(packet->packet_size, MTU);
+            uint32_t packet_size = min(packet->packet_size, PHYSICAL_LAYER_MTU);
             memcpy(frame, packet->buffer, packet_size);
-            packet->packet_size = 0;
-            packet->is_full = false;
-            socket->packet_read_index = (socket->packet_read_index + 1) % BUFFER_COUNT;
             return packet_size;
+        }
+
+        if (!blocking) {
+            return 0;
         }
     }
 
-    LOG_ERROR("Timed out on physical layer recv");
+    LOG_ERROR("Timed out on physical layer peek");
     return RECV_TIMEOUT_RET_CODE;
+}
+
+void PHYSICAL_LAYER__pop(audio_physical_layer_socket_t* socket) {
+    struct packet_buffer *packet = &socket->packet_buffers[socket->packet_read_index];
+    if (packet->is_full) {
+        packet->packet_size = 0;
+        packet->is_full = false;
+        socket->packet_read_index = (socket->packet_read_index + 1) % BUFFER_COUNT;
+    }
+}
+
+ssize_t PHYSICAL_LAYER__recv(audio_physical_layer_socket_t* socket, void* frame, size_t size) {
+    if (size < PHYSICAL_LAYER_MTU || frame == NULL) {
+        LOG_ERROR("Invalid parameters");
+        return -1;
+    }
+
+    ssize_t ret = PHYSICAL_LAYER__peek(socket, frame, size, true);
+    if (ret < 0) {
+        return ret;
+    } else if (ret == 0) {
+        return RECV_TIMEOUT_RET_CODE;
+    }
+
+    PHYSICAL_LAYER__pop(socket);
+    return ret;
 }
 

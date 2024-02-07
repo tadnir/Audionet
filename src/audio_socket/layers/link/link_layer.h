@@ -3,8 +3,11 @@
 
 #include <stdbool.h>
 #include <sys/types.h>
+#include "audio_socket/layers/physical/physical_layer.h"
 
+#define LINK_LAYER_MTU (256 * PHYSICAL_LAYER_MTU)
 #define RECV_TIMEOUT_RET_CODE (-2)
+#define RECV_OUT_OF_SYNC_RET_CODE (-3)
 
 typedef struct audio_link_layer_socket_s audio_link_layer_socket_t;
 
