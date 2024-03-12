@@ -58,7 +58,7 @@ void FFT__free(fft_t* fft) {
     free(fft->audioBuffer);
 }
 
-int FFT__calculate(fft_t* fft, const float* frames, size_t frame_count, struct frequency_and_magnitude** frequencies, size_t* out_length) {
+int FFT__calculate(fft_t* fft, const float* sample, size_t frame_count, struct frequency_and_magnitude** frequencies, size_t* out_length) {
     if (frame_count != fft->frame_count) {
         printf("Frame Count %lld\n", frame_count);
         exit(-1);
@@ -68,7 +68,7 @@ int FFT__calculate(fft_t* fft, const float* frames, size_t frame_count, struct f
     uint32_t bins_size = fft->sample_rate / frame_count;
 
     /* Execute the FFT calculation */
-    memcpy(fft->audioBuffer, frames, frame_count * sizeof(float));
+    memcpy(fft->audioBuffer, sample, frame_count * sizeof(float));
     fftwf_execute(fft->plan);
 
     /* Calculate frequencies/magnitudes */

@@ -6,6 +6,12 @@
 #include "audio_socket/layers/link/link_layer.h"
 #include "audio_socket/layers/transport/transport_layer.h"
 
+enum audio_socket_layer {
+    AUDIO_LAYER_PHYSICAL,
+    AUDIO_LAYER_LINK,
+    AUDIO_LAYER_TRANSPORT,
+};
+
 struct audio_socket_s {
     enum audio_socket_layer layer;
     audio_physical_layer_socket_t* physical_layer;
@@ -13,14 +19,14 @@ struct audio_socket_s {
     audio_transport_layer_socket_t * transport_layer;
 };
 
-audio_socket_t *AUDIO_SOCKET__initialize(enum audio_socket_layer layer) {
+audio_socket_t *AUDIO_SOCKET__initialize() {
     audio_socket_t* socket = malloc(sizeof(audio_socket_t));
     if (socket == NULL) {
         LOG_ERROR("Failed to allocate audio socket");
         return NULL;
     }
 
-    socket->layer = layer;
+    socket->layer = AUDIO_LAYER_TRANSPORT;
     switch (socket->layer) {
         case AUDIO_LAYER_PHYSICAL:
             socket->physical_layer = PHYSICAL_LAYER__initialize();

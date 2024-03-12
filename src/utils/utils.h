@@ -23,6 +23,7 @@
  *
  * @param a The first element.
  * @param b The second element.
+ * @return The smaller element.
  */
 #ifndef min
 #define min(a,b) (((a) < (b)) ? (a) : (b))
@@ -51,10 +52,11 @@
 bool array_contains(unsigned int needle, size_t haystack_size, unsigned int* haystack);
 
 /**
- * The combinatorics choose function.
+ * The combinatorics choose function nCr.
+ * Note: uses an O(r) implementation.
  *
- * @param n
- * @param r
+ * @param n The set size.
+ * @param r The sample size.
  * @return The calculated choose result.
  */
 uint64_t comb(int n, int r);
@@ -62,11 +64,11 @@ uint64_t comb(int n, int r);
 /**
  * Compare callback for sorting unsigned ints.
  *
- * @param va First value pointer.
- * @param vb Second value pointer.
- * @return The order indicator between va and vb.
+ * @param a First value pointer.
+ * @param b Second value pointer.
+ * @return The order indicator between a and b.
  */
-int compare_unsigned_ints(const unsigned int *va, const unsigned int *vb);
+int compare_unsigned_ints(const unsigned int *a, const unsigned int *b);
 
 /**
  * Compare callback for sorting floats.

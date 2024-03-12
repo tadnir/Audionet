@@ -1,6 +1,9 @@
 #ifndef AUDIONET_AUDIO_H
 #define AUDIONET_AUDIO_H
 
+/**
+ * The maximum amount of concurrent frequencies in a sound.
+ */
 #define SOUND_MAX_CONCURRENT_FREQUENCIES (5)
 
 /**
@@ -85,23 +88,30 @@ int AUDIO__stop(audio_t* audio);
 void AUDIO__set_recording_callback(audio_t* audio, recording_callback_t callback, void* callback_context);
 
 struct sound_s {
+    /**
+     * The length of the sound.
+     */
     uint32_t length_milliseconds;
-    uint32_t number_of_frequencies;
 
     /**
-     * A list of frequencies to be played overlaid together.
-     * At a maximum amount of MAX_OUTPUT_WAVEFORMS.
+     * A list of frequencies to be played overlaid together as a sound.
+     * At a maximum amount of SOUND_MAX_CONCURRENT_FREQUENCIES.
      * The more frequencies there are the less pronounced each of them will be.
      */
     uint32_t frequencies[SOUND_MAX_CONCURRENT_FREQUENCIES];
+
+    /**
+     * The amount of frequencies in the sound.
+     */
+    uint32_t number_of_frequencies;
 };
 
 /**
+ * Plays an array of given sounds in succession.
  *
- *
- * @param audio The audio interface to set.
- * @param frequencies The list of frequencies to set.
- * @param frequencies_count The amount of frequencies to set.
+ * @param audio The audio interface to play from.
+ * @param sounds The list of sounds to play.
+ * @param sounds_count The amount of sounds.
  * @return 0 On Success, -1 On Failure.
  */
 int AUDIO__play_sounds(audio_t* audio, struct sound_s* sounds, uint32_t sounds_count);

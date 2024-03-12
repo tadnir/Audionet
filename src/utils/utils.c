@@ -12,7 +12,7 @@ bool array_contains(unsigned int needle, size_t haystack_size, unsigned int* hay
 
 uint64_t comb(int n, int r) {
     uint64_t sum = 1;
-    // Calculate the value of n choose r using the binomial coefficient formula
+    /* Calculate the value of n choose r using the binomial coefficient formula */
     for(int i = 1; i <= r; i++) {
         sum = sum * (n - r + i) / i;
     }
@@ -20,8 +20,8 @@ uint64_t comb(int n, int r) {
     return sum;
 }
 
-int compare_unsigned_ints(const unsigned int *va, const unsigned int *vb) {
-    unsigned int a = *va, b = *vb;
+int compare_unsigned_ints(const unsigned int *a, const unsigned int *b) {
+    unsigned int a = *a, b = *b;
     return a < b ? -1 : a > b ? +1 : 0;
 }
 

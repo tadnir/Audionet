@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     size_t data_length = strlen(data) + 1;
 
     /* Initialize the client socket. */
-    audio_socket_t* socket = AUDIO_SOCKET__initialize(AUDIO_LAYER_TRANSPORT);
+    audio_socket_t* socket = AUDIO_SOCKET__initialize();
     if (socket == NULL) {
         LOG_ERROR("Failed to initialize socket");
         status = -1;

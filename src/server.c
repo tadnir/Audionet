@@ -16,7 +16,7 @@ int main() {
     int status;
 
     /* Initialize the audio socket. */
-    audio_socket_t* socket = AUDIO_SOCKET__initialize(AUDIO_LAYER_TRANSPORT);
+    audio_socket_t* socket = AUDIO_SOCKET__initialize();
     if (socket == NULL) {
         LOG_ERROR("Failed to initialize socket");
         status = -1;

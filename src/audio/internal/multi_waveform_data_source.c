@@ -182,7 +182,8 @@ multi_waveform_data_source_init(
     for (int i = 0; i < frequencies_count; ++i) {
         ma_waveform_config sineWaveDefaultConfig = ma_waveform_config_init(
                 format, channels, sampleRate, ma_waveform_type_sine,
-                /* Amplitude */ 1, frequencies[i]);
+                /* Amplitude, we will later mix them together so it can be 1 for now */ 1,
+                frequencies[i]);
         result = ma_waveform_init(&sineWaveDefaultConfig, &temp_multi_waveform->waveforms[i]);
         if (result != MA_SUCCESS) {
             LOG_ERROR("Failed to initialize waveform %d", i);
