@@ -5,7 +5,7 @@
 #include <stdbool.h>
 
 #include "audio_encoding.h"
-#include "logger.h"
+#include "utils/logger.h"
 #include "utils/utils.h"
 
 

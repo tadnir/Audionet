@@ -6,6 +6,14 @@
 #include <math.h>
 #include <stddef.h>
 
+#ifndef max
+#define max(a,b) (((a) > (b)) ? (a) : (b))
+#endif
+
+#ifndef min
+#define min(a,b) (((a) < (b)) ? (a) : (b))
+#endif
+
 #define ROUND_TO(number, rounder) (((float)rounder) * floor((((float)number)/((float)rounder))+0.5))
 
 bool array_contains(unsigned int needle, size_t haystack_size, unsigned int* haystack);

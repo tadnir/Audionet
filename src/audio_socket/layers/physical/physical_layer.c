@@ -7,11 +7,10 @@
 #include "physical_layer.h"
 
 #include "audio/audio.h"
-#include "logger.h"
+#include "utils/logger.h"
 #include "fft/fft.h"
-#include "utils/minmax.h"
-#include "audio_encoding.h"
 #include "utils/utils.h"
+#include "audio_encoding.h"
 
 
 #define SYMBOL_LENGTH_MILLISECONDS (150)

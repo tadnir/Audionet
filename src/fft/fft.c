@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "fft.h"
-#include "logger.h"
+#include "utils/logger.h"
 
 struct fft_s {
     int sample_rate;

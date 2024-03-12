@@ -1,7 +1,7 @@
 #include <malloc.h>
 #include "multi_waveform_data_source.h"
-#include "logger.h"
-#include "utils/minmax.h"
+#include "utils/logger.h"
+#include "utils/utils.h"
 
 static ma_result multi_waveform_data_source_read(ma_data_source* pDataSource, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead)
 {

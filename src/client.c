@@ -1,5 +1,5 @@
 #include <string.h>
-#include "logger.h"
+#include "utils/logger.h"
 #include "audio_socket/audio_socket.h"
 
 
@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
         goto l_cleanup;
     }
 
-    char* data = "Message";
+    char* data = "Message in a bottle";
     LOG_INFO("Sending: <%s>", data);
     status = AUDIO_SOCKET__send(socket, data, strlen(data) + 1);
     if (status != 0) {

@@ -7,7 +7,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-#include "logger.h"
+#include "utils/logger.h"
 #include "audio.h"
 #include "internal/multi_waveform_data_source.h"
 

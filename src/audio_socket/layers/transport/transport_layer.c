@@ -4,8 +4,8 @@
 
 #include "transport_layer.h"
 #include "audio_socket/layers/link/link_layer.h"
-#include "logger.h"
-#include "utils/minmax.h"
+#include "utils/logger.h"
+#include "utils/utils.h"
 
 #define TRANSPORT_PACKET_DATA_LENGTH_LIMIT (1024)
 

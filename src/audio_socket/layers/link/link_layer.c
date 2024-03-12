@@ -5,8 +5,8 @@
 
 #include "link_layer.h"
 #include "audio_socket/layers/physical/physical_layer.h"
-#include "logger.h"
-#include "utils/minmax.h"
+#include "utils/logger.h"
+#include "utils/utils.h"
 
 #define MAX_LINK_FRAMES (UCHAR_MAX + 1)
 #define MAX_LINK_PACKET_SIZE (MAX_LINK_FRAMES * (PHYSICAL_LAYER_MTU - 1))
