@@ -87,6 +87,10 @@ int AUDIO__stop(audio_t* audio);
  */
 void AUDIO__set_recording_callback(audio_t* audio, recording_callback_t callback, void* callback_context);
 
+/**
+ * A single sound that can be played,
+ * composed from multiple frequencies playing together for some duration.
+ */
 struct sound_s {
     /**
      * The length of the sound.
@@ -108,6 +112,8 @@ struct sound_s {
 
 /**
  * Plays an array of given sounds in succession.
+ * The function blocks until the sounds has been played,
+ * cannot call this function concurrently.
  *
  * @param audio The audio interface to play from.
  * @param sounds The list of sounds to play.
