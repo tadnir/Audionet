@@ -3,14 +3,22 @@
 #include "utils/logger.h"
 #include "utils/utils.h"
 
-static ma_result multi_waveform_data_source_read(ma_data_source* pDataSource, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead)
-{
-    if (pFramesRead != NULL) {
-        *pFramesRead = 0;
-    }
-
+/**
+ * Miniaudio API - implements reading of the next audio frame from the multi waveform datasource.
+ *
+ * @param pDataSource The multi-waveform datasource to read from.
+ * @param pFramesOut The sound buffer to write to.
+ * @param frameCount The size of the output sound buffer.
+ * @param pFramesRead Returns the amount of frames written to the output sound buffer.
+ * @return MA_SUCCESS on success, other enum values otherwise.
+ */
+static ma_result multi_waveform_data_source_read(ma_data_source* pDataSource, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead) {
     if (frameCount == 0 || pDataSource == NULL) {
         return MA_INVALID_ARGS;
+    }
+
+    if (pFramesRead != NULL) {
+        *pFramesRead = 0;
     }
 
     struct multi_waveform_data_source* dataSource = pDataSource;
@@ -51,6 +59,7 @@ static ma_result multi_waveform_data_source_read(ma_data_source* pDataSource, vo
         }
     }
 
+    /* Update the cursor with the last frame size. */
     dataSource->frame_cursor += frames_to_output;
     if (pFramesRead != NULL) {
         *pFramesRead = frames_to_output;
@@ -64,12 +73,19 @@ l_cleanup:
     return result;
 }
 
-// Seek to a specific PCM frame here. Return MA_NOT_IMPLEMENTED if seeking is not supported.
+/**
+ * Miniaudio API - Seek to a specific frame in the datasource.
+ *
+ * @param pDataSource The multi-waveform datasource to seek.
+ * @param frameIndex The frame index to seek to.
+ * @return MA_SUCCESS on success, other enum values otherwise.
+ */
 static ma_result multi_waveform_data_source_seek(ma_data_source* pDataSource, ma_uint64 frameIndex) {
     if (pDataSource == NULL) {
         return MA_INVALID_ARGS;
     }
 
+    /* We need to iterate and seek each sub-waveform. */
     ma_result result;
     struct multi_waveform_data_source* dataSource = pDataSource;
     for (int i = 0; i < dataSource->waveforms_count; ++i) {
@@ -80,78 +96,105 @@ static ma_result multi_waveform_data_source_seek(ma_data_source* pDataSource, ma
         }
     }
 
+    /* After seeking all sub-waveform we can update the frame cursor */
     dataSource->frame_cursor = frameIndex;
 
     return MA_SUCCESS;
 }
 
+/**
+ * Miniaudio API - Get the datasource data format and configurations.
+ *
+ * @param pDataSource The multi-waveform to get it's configurations
+ * @param pFormat Returns the data format of the datasource.
+ * @param pChannels Returns the channel count of the datasource.
+ * @param pSampleRate Returns the sample rate of the datasource.
+ * @param pChannelMap Returns the channel mapping of the datasource.
+ * @param channelMapCap The length of the channelMap parameter.
+ * @return MA_SUCCESS on success, other enum values otherwise.
+ */
 static ma_result multi_waveform_data_source_get_data_format(ma_data_source* pDataSource, ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate, ma_channel* pChannelMap, size_t channelMapCap)
 {
-    // Return the format of the data here.
-    return ma_data_source_get_data_format(&((struct multi_waveform_data_source*) pDataSource)->waveforms[0], pFormat, pChannels, pSampleRate, pChannelMap, channelMapCap);
+    if (pDataSource == NULL) {
+        return MA_INVALID_ARGS;
+    }
+
+    /* Since each waveform is configured identically, we can just return the configuration of the first one. */
+    return ma_data_source_get_data_format(
+            &((struct multi_waveform_data_source*) pDataSource)->waveforms[0],
+            pFormat, pChannels, pSampleRate,
+            pChannelMap, channelMapCap
+    );
 }
 
 /**
- * Retrieve the current position of the cursor here.
+ * Miniaudio API - Get the current position of the cursor.
  *
- * @param pDataSource The data source.
- * @param pLength Returns the current cursor value of the data source.
- * @return MA_SUCCESS on success, MA_ERROR on error.
+ * @param pDataSource The multi-waveform to get it's cursor position.
+ * @param pCursor Returns the current cursor value of the data source.
+ * @return MA_SUCCESS on success, other enum values otherwise.
  */
-static ma_result multi_waveform_data_source_get_cursor(ma_data_source* pDataSource, ma_uint64* pCursor)
-{
+static ma_result multi_waveform_data_source_get_cursor(ma_data_source* pDataSource, ma_uint64* pCursor) {
     if (pDataSource == NULL) {
-        return MA_ERROR;
+        return MA_INVALID_ARGS;
     }
 
+    /* We can simply return the current position of our cursor */
     struct multi_waveform_data_source* data_source = pDataSource;
     if (pCursor != NULL) {
         *pCursor = data_source->frame_cursor;
     }
+
     return MA_SUCCESS;
 }
 
 /**
- * Retrieve the length in PCM frames here.
+ * Miniaudio API - Get the length of the datasource in PCM frames.
  *
- * @param pDataSource The data source.
+ * @param pDataSource The multi-waveform to get it's length.
  * @param pLength Returns the length of the data source.
- * @return MA_SUCCESS on success, MA_ERROR on error.
+ * @return MA_SUCCESS on success, other enum values otherwise.
  */
-static ma_result multi_waveform_data_source_get_length(ma_data_source* pDataSource, ma_uint64* pLength)
-{
+static ma_result multi_waveform_data_source_get_length(ma_data_source* pDataSource, ma_uint64* pLength) {
     if (pDataSource == NULL) {
-        return MA_ERROR;
+        return MA_INVALID_ARGS;
     }
 
+    /* We can simply return the configured length of the multi-waveform as each sub-waveform is infinite */
     struct multi_waveform_data_source* data_source = pDataSource;
     if (pLength != NULL) {
         *pLength = data_source->length_frames;
     }
+
     return MA_SUCCESS;
 }
 
-static ma_data_source_vtable g_multi_waveform_data_source_vtable =
-        {
-                multi_waveform_data_source_read,
-                multi_waveform_data_source_seek,
-                multi_waveform_data_source_get_data_format,
-                multi_waveform_data_source_get_cursor,
-                multi_waveform_data_source_get_length
-        };
+/**
+ * This configures the API of the multi-waveform datasource for Miniaudio.
+ */
+static ma_data_source_vtable g_multi_waveform_data_source_vtable = {
+        multi_waveform_data_source_read,
+        multi_waveform_data_source_seek,
+        multi_waveform_data_source_get_data_format,
+        multi_waveform_data_source_get_cursor,
+        multi_waveform_data_source_get_length
+};
 
-ma_result
-multi_waveform_data_source_init(
+
+ma_result multi_waveform_data_source_init(
         struct multi_waveform_data_source **multi_waveform,
         ma_format format, ma_uint32 channels, ma_uint32 sampleRate,
         ma_uint32 *frequencies, ma_uint32 frequencies_count, ma_uint32 length_frames
 ) {
     ma_result result;
+
+    /* Validate parameters constraints */
     if (format != ma_format_f32) {
         LOG_ERROR("Mixing is currently not supported for non ma_format_f32 formats");
         return MA_ERROR;
     }
 
+    /* Allocate a new multi-waveform and initialize it's attributes. */
     struct multi_waveform_data_source* temp_multi_waveform = malloc(sizeof(struct multi_waveform_data_source));
     if (temp_multi_waveform == NULL) {
         LOG_ERROR("Failed to allocate mutli waveform");
@@ -170,6 +213,7 @@ multi_waveform_data_source_init(
         return MA_ERROR;
     }
 
+    /* Initialize the multi-waveform as a miniaudio datasource */
     ma_data_source_config baseConfig = ma_data_source_config_init();
     baseConfig.vtable = &g_multi_waveform_data_source_vtable;
     result = ma_data_source_init(&baseConfig, &temp_multi_waveform->base);
@@ -178,7 +222,7 @@ multi_waveform_data_source_init(
         goto l_cleanup;
     }
 
-    /* Initialize output waveforms */
+    /* Initialize sub-datasources of single frequency waveforms */
     for (int i = 0; i < frequencies_count; ++i) {
         ma_waveform_config sineWaveDefaultConfig = ma_waveform_config_init(
                 format, channels, sampleRate, ma_waveform_type_sine,
@@ -198,6 +242,7 @@ multi_waveform_data_source_init(
     temp_multi_waveform = NULL;
     result = MA_SUCCESS;
 l_cleanup:
+    /* Destroy the waveform on error */
     if (temp_multi_waveform != NULL) {
         if (temp_multi_waveform->waveforms != NULL) {
             free(temp_multi_waveform->waveforms);
@@ -211,16 +256,16 @@ l_cleanup:
     return result;
 }
 
-void multi_waveform_data_source_uninit(struct multi_waveform_data_source* pMultiWaveformDataSource)
-{
+
+void multi_waveform_data_source_uninit(struct multi_waveform_data_source* pMultiWaveformDataSource) {
+    /* uninitialize each sub-waveform and free the array */
     for (int i = 0; i < pMultiWaveformDataSource->waveforms_count; ++i) {
         ma_waveform_uninit(&pMultiWaveformDataSource->waveforms[i]);
     }
 
     free(pMultiWaveformDataSource->waveforms);
 
-    // You must uninitialize the base data source.
+    /* Uninitialize the multi-waveform and free it */
     ma_data_source_uninit(&pMultiWaveformDataSource->base);
-
     free(pMultiWaveformDataSource);
 }
