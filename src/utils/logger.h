@@ -1,9 +1,12 @@
+/**
+ * Defines logging macros for the project.
+ */
+
 #ifndef AUDIONET_LOGGER_H
 #define AUDIONET_LOGGER_H
 
 #include <stdio.h>
 
-//#define VERBOSE
 #ifdef VERBOSE
 #define LOG_VERBOSE(fmt, ...) LOG("V " fmt, ##__VA_ARGS__)
 #else
