@@ -97,8 +97,6 @@ ssize_t LINK_LAYER__recv(audio_link_layer_socket_t *socket, void *data, size_t s
     size_t current_new_data_count = 0;
     uint8_t seq = 0;
 
-    // TODO: Add CRC check
-
     while (true) {
         ssize_t recv_ret = PHYSICAL_LAYER__recv(socket->physical_layer, &frame, PHYSICAL_LAYER_MTU);
         if (recv_ret < 0) {

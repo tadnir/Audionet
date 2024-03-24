@@ -37,7 +37,6 @@ static float complex_magnitude(const fftwf_complex complex_number) {
 }
 
 fft_t* FFT__initialize(int frame_count, int sample_rate) {
-
     /* Allocate the FFT object */
     fft_t* fft = malloc(sizeof(fft_t));
     if (fft == NULL) {
