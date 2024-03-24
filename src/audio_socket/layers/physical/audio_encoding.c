@@ -8,15 +8,29 @@
 #include "utils/logger.h"
 #include "utils/utils.h"
 
-
+/**
+ * Calculates the channel index of the given frequency (rounding down).
+ */
 #define FREQUENCY_TO_CHANNEL_INDEX(frequency) (                                                           \
     (ROUND_TO((frequency), CHANNEL_FREQUENCY_BAND_WIDTH) / CHANNEL_FREQUENCY_BAND_WIDTH)                  \
     - (ROUND_TO(BASE_CHANNEL_FREQUENCY, CHANNEL_FREQUENCY_BAND_WIDTH) / CHANNEL_FREQUENCY_BAND_WIDTH)     \
 )
+
+/**
+ * Calculates the frequency for a given channel (gives a frequency the middle of the frequency channel width).
+ */
 #define CHANNEL_INDEX_TO_FREQUENCY(channel) (                                                             \
     (channel) * CHANNEL_FREQUENCY_BAND_WIDTH + (CHANNEL_FREQUENCY_BAND_WIDTH/2) + BASE_CHANNEL_FREQUENCY  \
 )
 
+/**
+ * Calculates the value of a received channel with respect to other transmitted channels.
+ *
+ * @param normalized_total_channels The total number for possible channels for the currently calculated channel value.
+ * @param number_of_lower_order_channels The amount of lower-order received channels.
+ * @param normalized_channel The normalized value of the channel.
+ * @return The calculated value of the channel.
+ */
 static uint64_t calculate_channel_value(unsigned int normalized_total_channels, unsigned int number_of_lower_order_channels, unsigned int normalized_channel) {
     /* We need to sum the number of arrangements of the lower order channels for each position of channel up to it's current value.
      * For example, when having 3 channels and 5 total channels we have these values:
@@ -38,7 +52,17 @@ static uint64_t calculate_channel_value(unsigned int normalized_total_channels, 
     return sum;
 }
 
-static uint64_t decode_channels_recurse(unsigned int normalized_total_channels, unsigned int zero_channel_number, size_t channels_length, unsigned int *channels) {
+/**
+ * Recursively calculates the value of each received channel, summing their values.
+ *
+ * @param normalized_total_channels The total number for possible channels for the currently calculated channel value.
+ * @param zero_channel_number The index of the "zero" channel.
+ * @param channels_length The amount of channels remaining to set.
+ * @param channels The array of channels to set.
+ * @return The total value of the channels given.
+ */
+static uint64_t decode_channels_recurse(unsigned int normalized_total_channels, unsigned int zero_channel_number,
+                                        size_t channels_length, unsigned int *channels) {
     /* This is the end condition for the recursion, when there's no channels to decode. */
     if (channels_length == 0) {
         return 0;
@@ -61,13 +85,32 @@ static uint64_t decode_channels_recurse(unsigned int normalized_total_channels, 
     );
 }
 
+/**
+ * Decodes the given channels to an integer number.
+ *
+ * @param total_channels The number of possible channels to transmit over.
+ * @param channels_length The amount of channels received.
+ * @param channels The channels received.
+ * @return The integer value decoded.
+ */
 static uint64_t decode_channels(unsigned int total_channels, size_t channels_length, unsigned int *channels) {
     /* We need to have the channels sorted for the algorithm */
     qsort(channels, channels_length, sizeof(unsigned int), (int (*)(const void *, const void *)) compare_unsigned_ints);
     return decode_channels_recurse(total_channels, 0, channels_length, channels);
 }
 
-static int encode_channels_recurse(unsigned int normalized_total_channels, unsigned int zero_channel_number, uint64_t remaining_to_encode, size_t channels_length, unsigned int *channels) {
+/**
+ * Tries to recursively encode an integer value to frequency channels.
+ *
+ * @param normalized_total_channels The total available channels.
+ * @param zero_channel_number The index of the current "zero" channel.
+ * @param remaining_to_encode The integer value to encode.
+ * @param channels_length The length of the channels array.
+ * @param channels The channels array to which we assign the channel values.
+ * @return 0 On Success, -1 On Failure.
+ */
+static int encode_channels_recurse(unsigned int normalized_total_channels, unsigned int zero_channel_number,
+                                   uint64_t remaining_to_encode, size_t channels_length, unsigned int *channels) {
     /* End condition for the recursion */
     if (channels_length == 0) {
         if (remaining_to_encode != 0) {
@@ -115,10 +158,27 @@ static int encode_channels_recurse(unsigned int normalized_total_channels, unsig
     );
 }
 
+/**
+ * Tries to encode an integer value to frequency channels.
+ *
+ * @param total_channels The total available number of channels.
+ * @param value The value to encode.
+ * @param channels_length The length of the channels array.
+ * @param channels An array of channels to assign.
+ * @return 0 On Success, -1 On Failure.
+ */
 static int encode_channels(unsigned int total_channels, uint64_t value, size_t channels_length, unsigned int *channels) {
     return encode_channels_recurse(total_channels, 0, value, channels_length, channels);
 }
 
+/**
+ * Compares `frequency_and_magnitude` structs by their magnitudes for sorting.
+ * The order is descending.
+ *
+ * @param a The first value.
+ * @param b The second value.
+ * @return The ordering between a and b.
+ */
 static int compare_magnitudes(const struct frequency_and_magnitude* a, const struct frequency_and_magnitude* b) {
     // Note: Reverse comparison for descending order
     return -1 * compare_floats(&a->magnitude, &b->magnitude);
@@ -126,6 +186,7 @@ static int compare_magnitudes(const struct frequency_and_magnitude* a, const str
 
 int AUDIO_ENCODING__decode_frequencies(uint64_t* value_out, size_t frequencies_count,
                                        struct frequency_and_magnitude frequencies[]) {
+    /* Validate parameters */
     if (frequencies_count < NUMBER_OF_CONCURRENT_CHANNELS) {
         LOG_ERROR("Expected at least %d frequencies, got: %lld", NUMBER_OF_CONCURRENT_CHANNELS, frequencies_count);
         return -1;
@@ -144,17 +205,20 @@ int AUDIO_ENCODING__decode_frequencies(uint64_t* value_out, size_t frequencies_c
     int channels_found = 0;
     unsigned int channels[NUMBER_OF_CONCURRENT_CHANNELS];
     for (int i = 0; i < frequencies_count && channels_found < NUMBER_OF_CONCURRENT_CHANNELS; i++) {
+        /* Check whether there's still sufficient sound. */
         if (frequencies[i].magnitude <= AMPLITUDE_MAGNITUDE_THRESHOLD) {
             LOG_VERBOSE("sound died out by frequency index %d", i);
             break;
         }
 
+        /* Transform the frequency into channel. */
         unsigned int channel = FREQUENCY_TO_CHANNEL_INDEX(frequencies[i].frequency);
         if (channel >= NUMBER_OF_CHANNELS) {
             LOG_VERBOSE("Invalid channel number: %d (probably due to noise)", channel);
             continue;
         }
 
+        /* We shouldn't have duplicate channels. */
         if (array_contains(channel, channels_found, channels)) {
             LOG_VERBOSE("Channel %d found twice, might be due to noise, multiple speakers or general collision. skipping", channel);
             continue;
@@ -170,8 +234,11 @@ int AUDIO_ENCODING__decode_frequencies(uint64_t* value_out, size_t frequencies_c
         return AUDIO_DECODE_RET_QUIET;
     }
 
+    /* Output the decoded channels value. */
     LOG_VERBOSE("Trying to decode %d %d %d", channels[0], channels[1], channels[2]);
     *value_out = decode_channels(NUMBER_OF_CHANNELS, NUMBER_OF_CONCURRENT_CHANNELS, channels);
+
+    /* Extra verbose debug prints */
 #ifdef VERBOSE
     printf("Decoded %llu: ", *value_out);
     for(int i=0; i < NUMBER_OF_CONCURRENT_CHANNELS; ++i) {
@@ -185,22 +252,27 @@ int AUDIO_ENCODING__decode_frequencies(uint64_t* value_out, size_t frequencies_c
 
 int AUDIO_ENCODING__encode_frequencies(uint64_t value, size_t frequencies_count,
                                        uint32_t frequencies[]) {
-    unsigned int channels[AUDIO_ENCODE_MAXIMUM_CONCURRENT_FREQUENCIES];
-    if (frequencies_count >= AUDIO_ENCODE_MAXIMUM_CONCURRENT_FREQUENCIES) {
+    unsigned int channels[NUMBER_OF_CONCURRENT_CHANNELS];
+
+    /* Validate parameters. */
+    if (frequencies_count != NUMBER_OF_CONCURRENT_CHANNELS) {
         LOG_ERROR("Encode frequencies count exceeded maximum allowed");
         return -1;
     }
 
+    /* Encode the value into channels. */
     int ret = encode_channels(NUMBER_OF_CHANNELS, value, frequencies_count, channels);
     if (ret != 0) {
         LOG_ERROR("Failed to encode value to channels");
         return ret;
     }
 
+    /* Translate the channels into frequencies. */
     for (int i = 0; i < frequencies_count; ++i) {
         frequencies[i] = CHANNEL_INDEX_TO_FREQUENCY(channels[i]);
     }
 
+    /* Extra verbose debug prints */
 #ifdef VERBOSE
     printf("Encoded %llu: ", value);
     for(int i=0; i < NUMBER_OF_CONCURRENT_CHANNELS; ++i) {
