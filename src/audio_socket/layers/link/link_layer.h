@@ -32,7 +32,7 @@ typedef struct audio_link_layer_socket_s audio_link_layer_socket_t;
 audio_link_layer_socket_t* LINK_LAYER__initialize();
 
 /**
- * Frees a physical layer socket.
+ * Frees a link layer socket.
  *
  * @param socket The socket to free.
  */
@@ -49,7 +49,7 @@ void LINK_LAYER__free(audio_link_layer_socket_t *socket);
 int LINK_LAYER__send(audio_link_layer_socket_t* socket, void* data, size_t size);
 
 /**
- * Receives packets over the audio link layer.
+ * Receives packet over the audio link layer.
  * May fail on timeout or synchronization with sender.
  *
  * @param socket The socket to receive the packet over.
