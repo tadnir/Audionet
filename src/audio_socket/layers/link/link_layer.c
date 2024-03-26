@@ -15,9 +15,7 @@
 #define MAX_LINK_PACKET_SIZE (MAX_LINK_FRAMES * (PHYSICAL_LAYER_MTU - 1))
 
 struct audio_link_layer_socket_s {
-    /**
-     * The link layer uses the physical layer to send frames.
-     */
+    /** The link layer uses the physical layer to send frames. */
     audio_physical_layer_socket_t* physical_layer;
 };
 
