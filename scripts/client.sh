@@ -1,1 +1,1 @@
-cmake -S . -B build && cmake --build build && build/AudioClient
+cmake -S . -B build && cmake --build build && build/AudioClient $@

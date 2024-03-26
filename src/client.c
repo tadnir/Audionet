@@ -13,7 +13,7 @@
  * @param argv The arguments to the program (including the program name), arg index 1 is the text to send.
  * @return 0 On Success, -1 On Failure.
  */
-int main(int argc, char **argv) {
+int main(int argc, char *argv[]) {
     int status;
 
     /* Validate the number of arguments is as expected. */

@@ -25,8 +25,6 @@
 #define LOG_ERROR(fmt, ...) LOG("E", fmt, ##__VA_ARGS__)
 #define LOG_FATAL(fmt, ...) LOG("F", fmt, ##__VA_ARGS__)
 
-#define xstr(x) str(x)
-#define str(x) #x
-#define LOG(level, fmt, ...) do { printf(xstr(__LINE__) "\t" level "\t" fmt "\n", ##__VA_ARGS__); fflush(stdout); } while (0)
+#define LOG(level, fmt, ...) do { printf(level "\t" fmt "\n", ##__VA_ARGS__); fflush(stdout); } while (0)
 
 #endif //AUDIONET_LOGGER_H

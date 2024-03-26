@@ -205,12 +205,13 @@ static void destroy_playback(ma_data_source* playback) {
  * In order to play them in succession, we can use Miniaudio's `ma_data_source_set_next` function
  * that will cause the datasources to be linked and play seamlessly one after the other as a single datasource.
  *
+ * @param audio_device The device the playback is expected to play on.
  * @param sounds The sounds to play.
  * @param sounds_count The number of sounds.
  * @param playback Returns the playback datasource.
  * @return 0 On Success, -1 On Failure.
  */
-static int create_sounds_playback(struct sound_s* sounds, uint32_t sounds_count, ma_data_source** playback) {
+static int create_sounds_playback(ma_device* audio_device, struct sound_s* sounds, uint32_t sounds_count, ma_data_source** playback) {
     int ret = -1;
     ma_result result;
 
@@ -219,9 +220,9 @@ static int create_sounds_playback(struct sound_s* sounds, uint32_t sounds_count,
     ma_data_source* first;
     result = multi_waveform_data_source_init(
             (struct multi_waveform_data_source **) &first,
-            audio->audio_device.playback.format, audio->audio_device.playback.channels, audio->audio_device.sampleRate,
+            audio_device->playback.format, audio_device->playback.channels, audio_device->sampleRate,
             sounds[0].frequencies, sounds[0].number_of_frequencies,
-            audio->audio_device.sampleRate / 1000 * sounds[0].length_milliseconds);
+            audio_device->sampleRate / 1000 * sounds[0].length_milliseconds);
     if (result != MA_SUCCESS) {
         LOG_ERROR("Failed to initialize multi waveform");
         ret = -1;
@@ -234,9 +235,9 @@ static int create_sounds_playback(struct sound_s* sounds, uint32_t sounds_count,
         /* Create a new datasource for the current sound. */
         result = multi_waveform_data_source_init(
                 (struct multi_waveform_data_source **) &current,
-                audio->audio_device.playback.format, audio->audio_device.playback.channels, audio->audio_device.sampleRate,
+                audio_device->playback.format, audio_device->playback.channels, audio_device->sampleRate,
                 sounds[i].frequencies, sounds[i].number_of_frequencies,
-                audio->audio_device.sampleRate / 1000 * sounds[i].length_milliseconds);
+                audio_device->sampleRate / 1000 * sounds[i].length_milliseconds);
         if (result != MA_SUCCESS) {
             LOG_ERROR("Failed to initialize multi waveform");
             ret = -1;
@@ -288,7 +289,7 @@ int AUDIO__play_sounds(audio_t* audio, struct sound_s* sounds, uint32_t sounds_c
 
     /* Create the playback from the given sounds. */
     ma_data_source* playback = NULL;
-    ret = create_sounds_playback(sounds, sounds_count, &playback);
+    ret = create_sounds_playback(&audio->audio_device, sounds, sounds_count, &playback);
     if (ret != 0) {
         LOG_ERROR("Failed to create sounds playback");
         return ret;

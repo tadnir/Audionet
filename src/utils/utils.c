@@ -21,8 +21,8 @@ uint64_t comb(int n, int r) {
 }
 
 int compare_unsigned_ints(const unsigned int *a, const unsigned int *b) {
-    unsigned int a = *a, b = *b;
-    return a < b ? -1 : a > b ? +1 : 0;
+    unsigned int av = *a, bv = *b;
+    return av < bv ? -1 : av > bv ? 1 : 0;
 }
 
 int compare_floats(const float* a, const float* b) {
