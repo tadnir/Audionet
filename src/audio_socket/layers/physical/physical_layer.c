@@ -255,8 +255,7 @@ audio_physical_layer_socket_t* PHYSICAL_LAYER__initialize() {
     socket->recv_timeout_seconds = RECV_TIMEOUT_SECONDS;
 
     /* Initialize the FFT module. */
-    //TODO: Set this value meaningfully.
-    socket->fft = FFT__initialize(3600, SAMPLE_RATE_48000);
+    socket->fft = FFT__initialize(SAMPLE_RATE_48000_SAMPLE_SIZE, SAMPLE_RATE_48000);
     if (socket->fft == NULL) {
         LOG_ERROR("Failed to initialize fft");
         free(socket);

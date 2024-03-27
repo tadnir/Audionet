@@ -119,8 +119,6 @@ audio_t* AUDIO__initialize(enum standard_sample_rate framerate, bool full_duplex
     deviceConfig.playback.format   = ma_format_f32;
     deviceConfig.playback.channels = 2;
     deviceConfig.sampleRate        = framerate;
-    // TODO: Fix this value:
-//    deviceConfig.periodSizeInMilliseconds = 150;
     deviceConfig.dataCallback      = audio_callback;
     deviceConfig.pUserData         = audio;
 

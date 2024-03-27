@@ -36,6 +36,15 @@ enum standard_sample_rate {
 };
 
 /**
+ * The corresponding sample size for each sample rate.
+ */
+enum standard_sample_rate_sample_size {
+    /* Most common */
+    SAMPLE_RATE_48000_SAMPLE_SIZE = 3600,
+    SAMPLE_RATE_44100_SAMPLE_SIZE = 3306,
+};
+
+/**
  * The audio interface type.
  */
 typedef struct audio_s audio_t;
@@ -51,6 +60,7 @@ typedef void (*recording_callback_t)(void* context, const float* recorded_frame,
  * Creating multiple interfaces leads to undefined behaviour.
  *
  * @param sample_rate The sample rate at which to record/play.
+ * @param full_duplex Whether recording is allowed while playing.
  * @return The initialize audio interface. Returns NULL on failure.
  */
 audio_t* AUDIO__initialize(enum standard_sample_rate sample_rate, bool full_duplex);
